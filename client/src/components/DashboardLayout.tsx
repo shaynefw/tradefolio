@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { trpc } from "../lib/trpc";
 import { useAuth } from "../contexts/AuthContext";
 import { useAccount } from "../contexts/AccountContext";
+import { useStrategy } from "../contexts/StrategyContext";
 import { cn } from "../lib/utils";
 import { Button } from "./ui/button";
 
@@ -133,6 +134,97 @@ function AccountSelector() {
 }
 
 // ---------------------------------------------------------------------------
+// Strategy selector (inline, no Radix Select required)
+// ---------------------------------------------------------------------------
+
+function StrategySelector() {
+  const { selectedStrategyId, setSelectedStrategyId } = useStrategy();
+  const { data: strategies = [] } = trpc.strategy.list.useQuery();
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const selected =
+    selectedStrategyId === null
+      ? "All Strategies"
+      : (strategies.find((s) => s.id === selectedStrategyId)?.name ?? "Strategy");
+
+  if (strategies.length === 0) return null;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between rounded-md border border-border bg-muted/50 px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent focus:outline-none"
+      >
+        <span className="flex items-center gap-2 truncate">
+          <Target className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="truncate">{selected}</span>
+        </span>
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
+            open && "rotate-180"
+          )}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-border bg-popover shadow-lg">
+          <button
+            className={cn(
+              "flex w-full items-center px-3 py-2 text-sm transition-colors hover:bg-accent",
+              selectedStrategyId === null
+                ? "text-primary font-medium"
+                : "text-foreground"
+            )}
+            onClick={() => {
+              setSelectedStrategyId(null);
+              setOpen(false);
+            }}
+          >
+            All Strategies
+          </button>
+
+          {strategies.map((s) => (
+            <button
+              key={s.id}
+              className={cn(
+                "flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-accent",
+                selectedStrategyId === s.id
+                  ? "text-primary font-medium"
+                  : "text-foreground"
+              )}
+              onClick={() => {
+                setSelectedStrategyId(s.id);
+                setOpen(false);
+              }}
+            >
+              {s.color && (
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: s.color }}
+                />
+              )}
+              <span className="truncate">{s.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Sidebar
 // ---------------------------------------------------------------------------
 
@@ -171,6 +263,9 @@ function Sidebar() {
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-3">
         {/* Account selector */}
         <AccountSelector />
+
+        {/* Strategy selector */}
+        <StrategySelector />
 
         {/* Nav */}
         <nav className="flex flex-1 flex-col gap-0.5">

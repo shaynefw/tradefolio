@@ -1,7 +1,9 @@
 import { useState, useMemo } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "../lib/trpc";
 import { useAccount } from "../contexts/AccountContext";
-import { cn, formatCurrency, pnlColor } from "../lib/utils";
+import { useStrategy } from "../contexts/StrategyContext";
+import { cn, formatCurrency, formatDate, pnlColor } from "../lib/utils";
 import DashboardLayout from "../components/DashboardLayout";
 import { Card, CardContent } from "../components/ui/card";
 import {
@@ -14,9 +16,15 @@ import {
 import { Button } from "../components/ui/button";
 import { Separator } from "../components/ui/separator";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
+import { Badge } from "../components/ui/badge";
+import {
   ChevronLeft,
   ChevronRight,
-  TrendingUp,
   Loader2,
   CalendarDays,
 } from "lucide-react";
@@ -40,6 +48,14 @@ interface DayStats {
   date: Date;
   pnl: number;
   count: number;
+}
+
+interface DayTrade {
+  id: number;
+  symbol: string;
+  side: string;
+  netPnl: number | null;
+  exitDate: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,14 +88,18 @@ const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 // ---------------------------------------------------------------------------
 
 export default function Calendar() {
+  const [, navigate] = useLocation();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const { selectedAccountId, accounts, setSelectedAccountId } = useAccount();
+  const { selectedStrategyId } = useStrategy();
+  const [selectedDay, setSelectedDay] = useState<{ date: Date; trades: DayTrade[] } | null>(null);
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
 
   const { data: trades = [], isLoading } = trpc.trade.list.useQuery({
     accountId: selectedAccountId ?? undefined,
+    strategyId: selectedStrategyId ?? undefined,
     startDate: tsToStr(monthStart.getTime()),
     endDate: tsToStr(monthEnd.getTime()),
   });
@@ -112,6 +132,27 @@ export default function Calendar() {
       map.set(key, { ...val, pnl: parseFloat(val.pnl.toFixed(2)) });
     }
 
+    return map;
+  }, [trades]);
+
+  // ---------------------------------------------------------------------------
+  // Build per-day trades map for click dialog
+  // ---------------------------------------------------------------------------
+
+  const dayTradesMap = useMemo(() => {
+    const map = new Map<string, DayTrade[]>();
+    for (const trade of trades) {
+      if (trade.status !== "closed" || !trade.exitDate) continue;
+      const key = format(new Date(trade.exitDate), "yyyy-MM-dd");
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push({
+        id: trade.id,
+        symbol: trade.symbol,
+        side: trade.side,
+        netPnl: trade.netPnl ?? null,
+        exitDate: trade.exitDate ?? null,
+      });
+    }
     return map;
   }, [trades]);
 
@@ -283,6 +324,14 @@ export default function Calendar() {
                   return (
                     <div
                       key={idx}
+                      onClick={() => {
+                        if (!cell.inMonth || !cell.date) return;
+                        const key = format(cell.date, "yyyy-MM-dd");
+                        const dayTrades = dayTradesMap.get(key) ?? [];
+                        if (dayTrades.length > 0) {
+                          setSelectedDay({ date: cell.date, trades: dayTrades });
+                        }
+                      }}
                       className={cn(
                         "min-h-[90px] border-b border-r border-border/50 p-2 transition-colors",
                         "last:border-r-0",
@@ -291,7 +340,9 @@ export default function Calendar() {
                         cell.inMonth
                           ? cn(
                               dayCellBg(stats, true),
-                              "hover:brightness-110 cursor-default"
+                              hasTrades
+                                ? "hover:brightness-110 cursor-pointer"
+                                : "cursor-default"
                             )
                           : "bg-transparent"
                       )}
@@ -454,6 +505,57 @@ export default function Calendar() {
           </div>
         )}
       </div>
+
+      {/* Day detail dialog */}
+      <Dialog open={selectedDay !== null} onOpenChange={(o) => { if (!o) setSelectedDay(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedDay ? format(selectedDay.date, "EEEE, MMMM d, yyyy") : ""}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+            {selectedDay?.trades.map((trade) => (
+              <div
+                key={trade.id}
+                className="flex items-center justify-between rounded-md px-3 py-2 hover:bg-accent cursor-pointer transition-colors"
+                onClick={() => {
+                  setSelectedDay(null);
+                  navigate(`/trades/${trade.id}`);
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="font-medium text-sm">{trade.symbol}</span>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-xs",
+                      trade.side === "long"
+                        ? "border-blue-500 text-blue-400"
+                        : "border-orange-500 text-orange-400"
+                    )}
+                  >
+                    {trade.side}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {formatDate(trade.exitDate)}
+                  </span>
+                </div>
+                <span
+                  className={cn(
+                    "text-sm font-semibold tabular-nums",
+                    pnlColor(trade.netPnl)
+                  )}
+                >
+                  {trade.netPnl != null
+                    ? (trade.netPnl >= 0 ? "+" : "") + formatCurrency(trade.netPnl)
+                    : "—"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

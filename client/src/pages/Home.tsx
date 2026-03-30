@@ -24,6 +24,7 @@ import { format } from "date-fns";
 import { trpc } from "../lib/trpc";
 import { useAccount } from "../contexts/AccountContext";
 import { useDateRange } from "../contexts/DateRangeContext";
+import { useStrategy } from "../contexts/StrategyContext";
 import { cn, formatCurrency, formatDate, pnlColor } from "../lib/utils";
 import { DashboardLayout } from "../components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
@@ -108,6 +109,10 @@ function computeStats(trades: Trade[]) {
     }
   }
 
+  // currentWin / currentLoss after loop = active streak
+  // positive = win streak, negative = loss streak
+  const currentStreak = currentWin > 0 ? currentWin : -currentLoss;
+
   return {
     totalPnl,
     winRate,
@@ -120,6 +125,7 @@ function computeStats(trades: Trade[]) {
     worstTrade,
     maxWinStreak,
     maxLossStreak,
+    currentStreak,
   };
 }
 
@@ -278,10 +284,12 @@ function ChartTooltip({
 export default function HomePage() {
   const [, navigate] = useLocation();
   const { selectedAccountId } = useAccount();
+  const { selectedStrategyId } = useStrategy();
   const { startDate, endDate } = useDateRange();
 
   const { data: trades = [], isLoading } = trpc.trade.list.useQuery({
     accountId: selectedAccountId ?? undefined,
+    strategyId: selectedStrategyId ?? undefined,
     startDate: startDate ? new Date(startDate).toISOString() : undefined,
     endDate: endDate ? new Date(endDate).toISOString() : undefined,
   });
@@ -420,7 +428,13 @@ export default function HomePage() {
             <StatCard
               label="Win / Loss Streak"
               value={`${stats.maxWinStreak}W / ${stats.maxLossStreak}L`}
-              sub="Longest streaks"
+              sub={
+                stats.currentStreak === 0
+                  ? "No active streak"
+                  : stats.currentStreak > 0
+                  ? `Current: ${stats.currentStreak} win streak`
+                  : `Current: ${Math.abs(stats.currentStreak)} loss streak`
+              }
               icon={Flame}
               iconClass="bg-orange-500/10 text-orange-400"
             />

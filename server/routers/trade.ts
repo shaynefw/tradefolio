@@ -389,6 +389,63 @@ export const tradeRouter = router({
       return { deleted: input.ids.length };
     }),
 
+  bulkAssignTags: protectedProcedure
+    .input(
+      z.object({
+        tradeIds: z.array(z.number()).min(1),
+        addTagIds: z.array(z.number()).optional().default([]),
+        removeTagIds: z.array(z.number()).optional().default([]),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+
+      // Verify ownership
+      const owned = await db
+        .select({ id: schema.trades.id })
+        .from(schema.trades)
+        .where(and(eq(schema.trades.userId, userId), inArray(schema.trades.id, input.tradeIds)));
+
+      const ownedIds = owned.map((t) => t.id);
+      if (ownedIds.length === 0) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "No trades found" });
+      }
+
+      // Remove specified tags from these trades
+      if (input.removeTagIds.length > 0) {
+        await db
+          .delete(schema.tradeTags)
+          .where(
+            and(
+              inArray(schema.tradeTags.tradeId, ownedIds),
+              inArray(schema.tradeTags.tagId, input.removeTagIds)
+            )
+          );
+      }
+
+      // Add specified tags — delete existing first to avoid duplicates, then insert
+      if (input.addTagIds.length > 0) {
+        await db
+          .delete(schema.tradeTags)
+          .where(
+            and(
+              inArray(schema.tradeTags.tradeId, ownedIds),
+              inArray(schema.tradeTags.tagId, input.addTagIds)
+            )
+          );
+
+        const newRows: Array<{ tradeId: number; tagId: number }> = [];
+        for (const tradeId of ownedIds) {
+          for (const tagId of input.addTagIds) {
+            newRows.push({ tradeId, tagId });
+          }
+        }
+        await db.insert(schema.tradeTags).values(newRows);
+      }
+
+      return { updated: ownedIds.length };
+    }),
+
   importCSV: protectedProcedure
     .input(
       z.object({

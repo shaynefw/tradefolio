@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { trpc } from "../lib/trpc";
 import { useAccount } from "../contexts/AccountContext";
 import { useDateRange } from "../contexts/DateRangeContext";
+import { useStrategy } from "../contexts/StrategyContext";
 import { cn, formatCurrency, formatDate, pnlColor } from "../lib/utils";
 import DashboardLayout from "../components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
@@ -103,6 +104,7 @@ function tsToDateStr(ts: number | null | undefined): string {
 
 export default function Analytics() {
   const { selectedAccountId, accounts, setSelectedAccountId } = useAccount();
+  const { selectedStrategyId } = useStrategy();
   const { dateRange, setDateRange, startDate, endDate } = useDateRange();
 
   const startDateStr = startDate ? tsToDateStr(startDate) : undefined;
@@ -110,6 +112,7 @@ export default function Analytics() {
 
   const { data: trades = [], isLoading } = trpc.trade.list.useQuery({
     accountId: selectedAccountId ?? undefined,
+    strategyId: selectedStrategyId ?? undefined,
     startDate: startDateStr,
     endDate: endDateStr,
   });

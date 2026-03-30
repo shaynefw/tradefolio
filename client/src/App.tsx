@@ -5,6 +5,7 @@ import { Toaster } from "sonner";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { AccountProvider } from "./contexts/AccountContext";
 import { DateRangeProvider } from "./contexts/DateRangeContext";
+import { StrategyProvider } from "./contexts/StrategyContext";
 
 // Lazy-load all pages
 const LoginPage = React.lazy(() => import("./pages/Login"));
@@ -137,6 +138,7 @@ export default function App() {
   return (
     <AuthProvider>
       <AccountProvider>
+        <StrategyProvider>
         <DateRangeProvider>
           <Toaster
             position="top-right"
@@ -153,6 +155,7 @@ export default function App() {
             <AppRoutes />
           </Router>
         </DateRangeProvider>
+        </StrategyProvider>
       </AccountProvider>
     </AuthProvider>
   );

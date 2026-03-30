@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { trpc } from "../lib/trpc";
 import { useAccount } from "../contexts/AccountContext";
 import { useDateRange } from "../contexts/DateRangeContext";
+import { useStrategy } from "../contexts/StrategyContext";
 import { cn, formatCurrency, formatDate, pnlColor } from "../lib/utils";
 import DashboardLayout from "../components/DashboardLayout";
 import { Button } from "../components/ui/button";
@@ -51,6 +52,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Search,
+  Tags,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -88,6 +90,7 @@ const defaultForm: NewTradeForm = {
 
 export default function TradeLog() {
   const { selectedAccountId, accounts } = useAccount();
+  const { selectedStrategyId } = useStrategy();
   const { startDate, endDate } = useDateRange();
 
   // Filters
@@ -107,6 +110,9 @@ export default function TradeLog() {
   const [showNewTrade, setShowNewTrade] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [showBulkDelete, setShowBulkDelete] = useState(false);
+  const [showBulkTag, setShowBulkTag] = useState(false);
+  const [bulkTagAdd, setBulkTagAdd] = useState<Set<number>>(new Set());
+  const [bulkTagRemove, setBulkTagRemove] = useState<Set<number>>(new Set());
   const [form, setForm] = useState<NewTradeForm>(defaultForm);
 
   const startDateStr = startDate ? format(new Date(startDate), "MM/dd/yyyy") : undefined;
@@ -114,6 +120,7 @@ export default function TradeLog() {
 
   const { data: trades = [], refetch } = trpc.trade.list.useQuery({
     accountId: selectedAccountId ?? undefined,
+    strategyId: selectedStrategyId ?? undefined,
     startDate: startDateStr,
     endDate: endDateStr,
     status: filterStatus === "all" ? undefined : filterStatus,
@@ -137,6 +144,18 @@ export default function TradeLog() {
       setSelected(new Set());
       refetch();
       setShowBulkDelete(false);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const bulkAssignTagsMutation = trpc.trade.bulkAssignTags.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Tags updated for ${data.updated} trades`);
+      setSelected(new Set());
+      setBulkTagAdd(new Set());
+      setBulkTagRemove(new Set());
+      refetch();
+      setShowBulkTag(false);
     },
     onError: (err) => toast.error(err.message),
   });
@@ -323,6 +342,20 @@ export default function TradeLog() {
         {selected.size > 0 && (
           <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
             <span className="text-sm font-medium">{selected.size} selected</span>
+            {tags.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setBulkTagAdd(new Set());
+                  setBulkTagRemove(new Set());
+                  setShowBulkTag(true);
+                }}
+              >
+                <Tags className="h-4 w-4 mr-1" />
+                Tag Selected
+              </Button>
+            )}
             <Button
               variant="destructive"
               size="sm"
@@ -674,6 +707,85 @@ export default function TradeLog() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Bulk tag dialog */}
+      <Dialog open={showBulkTag} onOpenChange={(o) => { setShowBulkTag(o); if (!o) { setBulkTagAdd(new Set()); setBulkTagRemove(new Set()); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Tag {selected.size} Selected Trade{selected.size !== 1 ? "s" : ""}</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-4">
+            <div>
+              <p className="text-sm font-medium mb-2">Add tags</p>
+              <div className="flex flex-wrap gap-2">
+                {tags.map((tag) => (
+                  <label key={tag.id} className="flex items-center gap-1.5 cursor-pointer">
+                    <Checkbox
+                      checked={bulkTagAdd.has(tag.id)}
+                      onCheckedChange={() => {
+                        setBulkTagAdd((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(tag.id)) next.delete(tag.id); else next.add(tag.id);
+                          return next;
+                        });
+                        // Can't add and remove same tag
+                        setBulkTagRemove((prev) => {
+                          const next = new Set(prev);
+                          next.delete(tag.id);
+                          return next;
+                        });
+                      }}
+                    />
+                    <span className="text-sm" style={{ color: tag.color ?? undefined }}>{tag.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <Separator />
+            <div>
+              <p className="text-sm font-medium mb-2">Remove tags</p>
+              <div className="flex flex-wrap gap-2">
+                {tags.map((tag) => (
+                  <label key={tag.id} className="flex items-center gap-1.5 cursor-pointer">
+                    <Checkbox
+                      checked={bulkTagRemove.has(tag.id)}
+                      onCheckedChange={() => {
+                        setBulkTagRemove((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(tag.id)) next.delete(tag.id); else next.add(tag.id);
+                          return next;
+                        });
+                        // Can't add and remove same tag
+                        setBulkTagAdd((prev) => {
+                          const next = new Set(prev);
+                          next.delete(tag.id);
+                          return next;
+                        });
+                      }}
+                    />
+                    <span className="text-sm" style={{ color: tag.color ?? undefined }}>{tag.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBulkTag(false)}>Cancel</Button>
+            <Button
+              onClick={() =>
+                bulkAssignTagsMutation.mutate({
+                  tradeIds: Array.from(selected),
+                  addTagIds: Array.from(bulkTagAdd),
+                  removeTagIds: Array.from(bulkTagRemove),
+                })
+              }
+              disabled={bulkAssignTagsMutation.isPending || (bulkTagAdd.size === 0 && bulkTagRemove.size === 0)}
+            >
+              {bulkAssignTagsMutation.isPending ? "Applying..." : "Apply Tags"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Bulk delete confirmation */}
       <AlertDialog open={showBulkDelete} onOpenChange={setShowBulkDelete}>
