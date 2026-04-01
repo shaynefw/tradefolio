@@ -58,18 +58,18 @@ function AppRoutes() {
           )}
         </Route>
 
-        <Route path="/trades">
-          {() => (
-            <Protected>
-              <TradeLog />
-            </Protected>
-          )}
-        </Route>
-
         <Route path="/trades/:id">
           {() => (
             <Protected>
               <TradeDetail />
+            </Protected>
+          )}
+        </Route>
+
+        <Route path="/trades">
+          {() => (
+            <Protected>
+              <TradeLog />
             </Protected>
           )}
         </Route>
