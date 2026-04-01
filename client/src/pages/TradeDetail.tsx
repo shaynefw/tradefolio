@@ -461,14 +461,14 @@ export default function TradeDetail() {
                 <div className="space-y-1.5">
                   <Label>Account</Label>
                   <Select
-                    value={form.watch("accountId") ?? ""}
-                    onValueChange={(v) => form.setValue("accountId", v)}
+                    value={form.watch("accountId") || "none"}
+                    onValueChange={(v) => form.setValue("accountId", v === "none" ? "" : v)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="No account" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No account</SelectItem>
+                      <SelectItem value="none">No account</SelectItem>
                       {accounts.map((acc: { id: number; name: string }) => (
                         <SelectItem key={acc.id} value={String(acc.id)}>
                           {acc.name}
@@ -482,14 +482,14 @@ export default function TradeDetail() {
                 <div className="space-y-1.5">
                   <Label>Strategy</Label>
                   <Select
-                    value={form.watch("strategyId") ?? ""}
-                    onValueChange={(v) => form.setValue("strategyId", v)}
+                    value={form.watch("strategyId") || "none"}
+                    onValueChange={(v) => form.setValue("strategyId", v === "none" ? "" : v)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="No strategy" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No strategy</SelectItem>
+                      <SelectItem value="none">No strategy</SelectItem>
                       {strategies.map((s: { id: number; name: string }) => (
                         <SelectItem key={s.id} value={String(s.id)}>
                           {s.name}

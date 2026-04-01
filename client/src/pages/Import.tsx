@@ -602,7 +602,7 @@ function BackupImportTab() {
         <Select value={accountId} onValueChange={setAccountId}>
           <SelectTrigger className="w-72"><SelectValue placeholder="Use accounts from backup" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Use accounts from backup</SelectItem>
+            <SelectItem value="none">Use accounts from backup</SelectItem>
             {accountsQuery.data?.map((a) => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
           </SelectContent>
         </Select>
@@ -610,7 +610,7 @@ function BackupImportTab() {
       <Separator />
       <Button onClick={() => {
         if (!jsonText.trim()) { toast.error("Paste or upload a JSON backup file."); return; }
-        importMutation.mutate({ data: jsonText, accountId: accountId ? Number(accountId) : null });
+        importMutation.mutate({ data: jsonText, accountId: accountId && accountId !== "none" ? Number(accountId) : null });
       }} disabled={importMutation.isPending || !jsonText.trim()}>
         {importMutation.isPending ? "Importing…" : "Import Backup"}
       </Button>
