@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
-import { Plus, Pencil, Trash2, Loader2, Star } from "lucide-react"
+import { Plus, Pencil, Trash2, Loader2, Star, Download, Upload } from "lucide-react"
 import DashboardLayout from "../components/DashboardLayout"
 import { trpc } from "../lib/trpc"
 import { cn } from "../lib/utils"
@@ -33,14 +33,10 @@ import {
 } from "../components/ui/alert-dialog"
 
 const COLOR_SWATCHES = [
-  "#6366f1",
-  "#8b5cf6",
-  "#06b6d4",
-  "#10b981",
-  "#f59e0b",
-  "#ef4444",
-  "#ec4899",
-  "#64748b",
+  "#6366f1", "#8b5cf6", "#a855f7", "#d946ef", "#ec4899",
+  "#f43f5e", "#ef4444", "#f97316", "#f59e0b", "#eab308",
+  "#84cc16", "#22c55e", "#10b981", "#14b8a6", "#06b6d4",
+  "#0ea5e9", "#3b82f6", "#6366f1", "#64748b", "#78716c",
 ]
 
 const accountSchema = z.object({
@@ -72,6 +68,8 @@ export default function Accounts() {
   const [createOpen, setCreateOpen] = useState(false)
   const [editAccount, setEditAccount] = useState<Account | null>(null)
   const [deleteAccount, setDeleteAccount] = useState<Account | null>(null)
+  const [exportingId, setExportingId] = useState<number | null>(null)
+  const [importingId, setImportingId] = useState<number | null>(null)
 
   const { data: accounts = [], isLoading } = trpc.account.list.useQuery()
   const utils = trpc.useUtils()
@@ -115,6 +113,52 @@ export default function Accounts() {
     onError: (err) => toast.error(err.message),
   })
 
+  const importMutation = trpc.backup.import.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Restored ${data.imported} trades`)
+      setImportingId(null)
+      invalidate()
+      utils.trade.list.invalidate()
+    },
+    onError: (err) => toast.error(err.message),
+  })
+
+  async function handleExport(accountId: number, accountName: string) {
+    setExportingId(accountId)
+    try {
+      const json = await utils.backup.export.fetch({ accountId })
+      const blob = new Blob([json], { type: "application/json" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `tradefolio-${accountName.toLowerCase().replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success("Backup exported")
+    } catch (err: any) {
+      toast.error(err.message ?? "Export failed")
+    } finally {
+      setExportingId(null)
+    }
+  }
+
+  function handleImport(accountId: number) {
+    const input = document.createElement("input")
+    input.type = "file"
+    input.accept = ".json"
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      try {
+        const text = await file.text()
+        importMutation.mutate({ data: text, accountId })
+      } catch {
+        toast.error("Failed to read file")
+      }
+    }
+    input.click()
+  }
+
   return (
     <DashboardLayout>
       <div className="mx-auto max-w-6xl space-y-6 px-4 py-6">
@@ -156,6 +200,8 @@ export default function Accounts() {
                 onEdit={() => setEditAccount(account)}
                 onDelete={() => setDeleteAccount(account)}
                 onSetDefault={() => setDefaultMutation.mutate({ id: account.id })}
+                onExport={() => handleExport(account.id, account.name)}
+                onImport={() => handleImport(account.id)}
               />
             ))}
           </div>
@@ -230,11 +276,15 @@ function AccountCard({
   onEdit,
   onDelete,
   onSetDefault,
+  onExport,
+  onImport,
 }: {
   account: Account
   onEdit: () => void
   onDelete: () => void
   onSetDefault: () => void
+  onExport: () => void
+  onImport: () => void
 }) {
   return (
     <Card className="overflow-hidden">
@@ -291,6 +341,24 @@ function AccountCard({
                 <Star className="h-3.5 w-3.5" />
               </Button>
             )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              onClick={onExport}
+              title="Export backup"
+            >
+              <Download className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              onClick={onImport}
+              title="Import backup"
+            >
+              <Upload className="h-3.5 w-3.5" />
+            </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -391,10 +459,10 @@ function AccountDialog({
           {/* Color */}
           <div className="space-y-1.5">
             <Label>Color</Label>
-            <div className="flex gap-2">
-              {COLOR_SWATCHES.map((color) => (
+            <div className="flex flex-wrap gap-2">
+              {COLOR_SWATCHES.map((color, i) => (
                 <button
-                  key={color}
+                  key={`${color}-${i}`}
                   type="button"
                   className={cn(
                     "h-7 w-7 rounded-full transition-transform hover:scale-110 focus:outline-none",

@@ -17,7 +17,8 @@ import {
   Trophy,
   Flame,
   BarChart3,
-  Calendar,
+  Upload,
+  Plus,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -27,8 +28,10 @@ import { useDateRange } from "../contexts/DateRangeContext";
 import { useStrategy } from "../contexts/StrategyContext";
 import { cn, formatCurrency, formatDate, pnlColor } from "../lib/utils";
 import { DashboardLayout } from "../components/DashboardLayout";
+import { DateRangePicker } from "../components/DateRangePicker";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
 import { Separator } from "../components/ui/separator";
 
 // ---------------------------------------------------------------------------
@@ -154,50 +157,6 @@ function buildChartData(trades: Trade[]) {
 }
 
 // ---------------------------------------------------------------------------
-// DateRangePicker (inline)
-// ---------------------------------------------------------------------------
-
-function DateRangePicker() {
-  const { dateRange, setDateRange } = useDateRange();
-
-  const fromValue = dateRange.from
-    ? format(dateRange.from, "yyyy-MM-dd")
-    : "";
-  const toValue = dateRange.to ? format(dateRange.to, "yyyy-MM-dd") : "";
-
-  return (
-    <div className="flex items-center gap-2">
-      <Calendar className="h-4 w-4 text-muted-foreground" />
-      <div className="flex items-center gap-1.5">
-        <input
-          type="date"
-          value={fromValue}
-          onChange={(e) =>
-            setDateRange({
-              ...dateRange,
-              from: e.target.value ? new Date(e.target.value + "T00:00:00") : undefined,
-            })
-          }
-          className="rounded-md border border-border bg-muted/50 px-2 py-1 text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-        <span className="text-muted-foreground text-xs">to</span>
-        <input
-          type="date"
-          value={toValue}
-          onChange={(e) =>
-            setDateRange({
-              ...dateRange,
-              to: e.target.value ? new Date(e.target.value + "T23:59:59") : undefined,
-            })
-          }
-          className="rounded-md border border-border bg-muted/50 px-2 py-1 text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Stat card
 // ---------------------------------------------------------------------------
 
@@ -318,13 +277,49 @@ export default function HomePage() {
               Dashboard
             </h1>
             <p className="text-sm text-muted-foreground">
-              Overview of your trading performance
+              Your trading performance at a glance
             </p>
           </div>
-          <DateRangePicker />
+          <div className="flex items-center gap-2">
+            <DateRangePicker />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5"
+              onClick={() => navigate("/import")}
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Import
+            </Button>
+          </div>
         </div>
 
         <Separator className="bg-border" />
+
+        {/* Empty state */}
+        {!isLoading && trades.length === 0 && (
+          <Card className="bg-card border-border">
+            <CardContent className="flex flex-col items-center justify-center gap-4 py-16">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+                <Activity className="h-7 w-7 text-muted-foreground" />
+              </div>
+              <div className="text-center">
+                <h3 className="text-lg font-semibold text-foreground">
+                  No trades yet
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Import your first trades or add one manually to get started.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => navigate("/import")}>
+                  <Upload className="mr-1.5 h-3.5 w-3.5" />
+                  Import Trades
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Stats grid */}
         {isLoading ? (

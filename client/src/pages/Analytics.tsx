@@ -5,6 +5,7 @@ import { useDateRange } from "../contexts/DateRangeContext";
 import { useStrategy } from "../contexts/StrategyContext";
 import { cn, formatCurrency, formatDate, pnlColor } from "../lib/utils";
 import DashboardLayout from "../components/DashboardLayout";
+import { DateRangePicker } from "../components/DateRangePicker";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import {
   Select,
@@ -107,7 +108,7 @@ function tsToDateStr(ts: number | null | undefined): string {
 export default function Analytics() {
   const { selectedAccountId, accounts, setSelectedAccountId } = useAccount();
   const { selectedStrategyId } = useStrategy();
-  const { dateRange, setDateRange, startDate, endDate } = useDateRange();
+  const { startDate, endDate } = useDateRange();
 
   const startDateStr = startDate ? tsToDateStr(startDate) : undefined;
   const endDateStr = endDate ? tsToDateStr(endDate) : undefined;
@@ -426,14 +427,6 @@ export default function Analytics() {
   }, [closedTrades]);
 
   // ---------------------------------------------------------------------------
-  // Date input values (controlled)
-  // ---------------------------------------------------------------------------
-
-  const fromInputValue = dateRange.from
-    ? format(dateRange.from, "yyyy-MM-dd")
-    : "";
-  const toInputValue = dateRange.to ? format(dateRange.to, "yyyy-MM-dd") : "";
-
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
@@ -454,34 +447,7 @@ export default function Analytics() {
 
           {/* Filters row */}
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-muted-foreground whitespace-nowrap">From</label>
-              <input
-                type="date"
-                value={fromInputValue}
-                onChange={(e) =>
-                  setDateRange({
-                    ...dateRange,
-                    from: e.target.value ? new Date(e.target.value + "T00:00:00") : undefined,
-                  })
-                }
-                className="rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-muted-foreground whitespace-nowrap">To</label>
-              <input
-                type="date"
-                value={toInputValue}
-                onChange={(e) =>
-                  setDateRange({
-                    ...dateRange,
-                    to: e.target.value ? new Date(e.target.value + "T23:59:59") : undefined,
-                  })
-                }
-                className="rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-            </div>
+            <DateRangePicker />
 
             <Select
               value={selectedAccountId != null ? String(selectedAccountId) : "all"}

@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
-import { Plus, Pencil, Trash2, Loader2, Tag } from "lucide-react"
+import { Plus, Pencil, Trash2, Loader2, Tag, Search } from "lucide-react"
 import DashboardLayout from "../components/DashboardLayout"
 import { trpc } from "../lib/trpc"
 import { cn } from "../lib/utils"
@@ -30,14 +30,10 @@ import {
 } from "../components/ui/alert-dialog"
 
 const COLOR_SWATCHES = [
-  "#6366f1",
-  "#8b5cf6",
-  "#06b6d4",
-  "#10b981",
-  "#f59e0b",
-  "#ef4444",
-  "#ec4899",
-  "#64748b",
+  "#6366f1", "#8b5cf6", "#a855f7", "#d946ef", "#ec4899",
+  "#f43f5e", "#ef4444", "#f97316", "#f59e0b", "#eab308",
+  "#84cc16", "#22c55e", "#10b981", "#14b8a6", "#06b6d4",
+  "#0ea5e9", "#3b82f6", "#6366f1", "#64748b", "#78716c",
 ]
 
 const tagSchema = z.object({
@@ -60,8 +56,13 @@ export default function Tags() {
   const [createOpen, setCreateOpen] = useState(false)
   const [editTag, setEditTag] = useState<TagItem | null>(null)
   const [deleteTag, setDeleteTag] = useState<TagItem | null>(null)
+  const [search, setSearch] = useState("")
 
   const { data: tags = [], isLoading } = trpc.tag.list.useQuery()
+
+  const filteredTags = tags.filter((t: TagItem) =>
+    !search || t.name.toLowerCase().includes(search.toLowerCase())
+  )
   const utils = trpc.useUtils()
 
   function invalidate() {
@@ -112,6 +113,19 @@ export default function Tags() {
           </Button>
         </div>
 
+        {/* Search */}
+        {tags.length > 0 && (
+          <div className="relative max-w-xs">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search tags..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8"
+            />
+          </div>
+        )}
+
         {/* Tag List */}
         {isLoading ? (
           <div className="flex h-40 items-center justify-center">
@@ -130,7 +144,7 @@ export default function Tags() {
           </Card>
         ) : (
           <div className="flex flex-wrap gap-3">
-            {tags.map((tag: TagItem) => (
+            {filteredTags.map((tag: TagItem) => (
               <div
                 key={tag.id}
                 className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm shadow-sm"
@@ -284,10 +298,10 @@ function TagDialog({
           {/* Color */}
           <div className="space-y-1.5">
             <Label>Color</Label>
-            <div className="flex gap-2">
-              {COLOR_SWATCHES.map((color) => (
+            <div className="flex flex-wrap gap-2">
+              {COLOR_SWATCHES.map((color, i) => (
                 <button
-                  key={color}
+                  key={`${color}-${i}`}
                   type="button"
                   className={cn(
                     "h-7 w-7 rounded-full transition-transform hover:scale-110 focus:outline-none",
