@@ -1,4 +1,5 @@
 import { createContext, useContext, useState } from "react";
+import { endOfDay } from "date-fns";
 
 interface DateRange {
   from: Date | undefined;

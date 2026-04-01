@@ -19,6 +19,8 @@ import {
   Area,
   BarChart,
   Bar,
+  PieChart,
+  Pie,
   XAxis,
   YAxis,
   Tooltip as RechartsTooltip,
@@ -133,8 +135,16 @@ export default function Analytics() {
     grossLoss,
     profitFactor,
     expectancy,
+    riskRewardRatio,
+    sharpeRatio,
+    maxDrawdown,
+    maxDrawdownPct,
+    recoveryFactor,
     bestTrade,
     worstTrade,
+    currentStreak,
+    maxWinStreak,
+    maxLossStreak,
   } = useMemo(() => {
     const closedTrades = trades.filter((t) => t.status === "closed" && t.netPnl != null);
     const winners = closedTrades.filter((t) => (t.netPnl ?? 0) > 0);
@@ -148,7 +158,7 @@ export default function Analytics() {
         : 0;
     const avgLoss =
       losers.length > 0
-        ? losers.reduce((s, t) => s + (t.netPnl ?? 0), 0) / losers.length
+        ? Math.abs(losers.reduce((s, t) => s + (t.netPnl ?? 0), 0)) / losers.length
         : 0;
     const grossProfit = winners.reduce((s, t) => s + (t.netPnl ?? 0), 0);
     const grossLoss = Math.abs(losers.reduce((s, t) => s + (t.netPnl ?? 0), 0));
@@ -160,6 +170,58 @@ export default function Analytics() {
         : 0;
     const expectancy =
       closedTrades.length > 0 ? totalPnl / closedTrades.length : 0;
+
+    // Risk/Reward Ratio
+    const riskRewardRatio = avgLoss > 0 ? avgWin / avgLoss : avgWin > 0 ? Infinity : 0;
+
+    // Sharpe-like ratio (avg / stdDev)
+    const mean = closedTrades.length > 0 ? totalPnl / closedTrades.length : 0;
+    const variance =
+      closedTrades.length > 0
+        ? closedTrades.reduce((s, t) => s + Math.pow((t.netPnl ?? 0) - mean, 2), 0) / closedTrades.length
+        : 0;
+    const stdDev = Math.sqrt(variance);
+    const sharpeRatio = stdDev > 0 ? mean / stdDev : 0;
+
+    // Max drawdown
+    const sortedClosed = [...closedTrades].sort(
+      (a, b) => (a.exitDate ?? a.entryDate ?? 0) - (b.exitDate ?? b.entryDate ?? 0)
+    );
+    let peak = 0;
+    let cum = 0;
+    let maxDrawdown = 0;
+    let maxDrawdownPct = 0;
+    for (const t of sortedClosed) {
+      cum += t.netPnl ?? 0;
+      if (cum > peak) peak = cum;
+      const dd = peak - cum;
+      if (dd > maxDrawdown) {
+        maxDrawdown = dd;
+        maxDrawdownPct = peak > 0 ? (dd / peak) * 100 : 0;
+      }
+    }
+
+    // Recovery factor
+    const recoveryFactor = maxDrawdown > 0 ? totalPnl / maxDrawdown : totalPnl > 0 ? Infinity : 0;
+
+    // Streaks
+    let curWin = 0;
+    let curLoss = 0;
+    let maxWinStreak = 0;
+    let maxLossStreak = 0;
+    for (const t of sortedClosed) {
+      if ((t.netPnl ?? 0) > 0) {
+        curWin++;
+        curLoss = 0;
+        maxWinStreak = Math.max(maxWinStreak, curWin);
+      } else {
+        curLoss++;
+        curWin = 0;
+        maxLossStreak = Math.max(maxLossStreak, curLoss);
+      }
+    }
+    const currentStreak = curWin > 0 ? curWin : -curLoss;
+
     const bestTrade = closedTrades.reduce(
       (best, t) => ((t.netPnl ?? 0) > (best?.netPnl ?? -Infinity) ? t : best),
       null as (typeof closedTrades)[0] | null
@@ -180,8 +242,16 @@ export default function Analytics() {
       grossLoss,
       profitFactor,
       expectancy,
+      riskRewardRatio,
+      sharpeRatio,
+      maxDrawdown,
+      maxDrawdownPct,
+      recoveryFactor,
       bestTrade,
       worstTrade,
+      currentStreak,
+      maxWinStreak,
+      maxLossStreak,
     };
   }, [trades]);
 
@@ -294,6 +364,65 @@ export default function Analytics() {
       pnl: counts[h] > 0 ? parseFloat((sums[h] / counts[h]).toFixed(2)) : null,
       count: counts[h],
     })).filter((d) => d.count > 0);
+  }, [closedTrades]);
+
+  // 7. Weekly P&L
+  const weeklyData = useMemo(() => {
+    const map = new Map<string, { pnl: number; ts: number }>();
+    for (const t of closedTrades) {
+      if (!t.exitDate) continue;
+      const d = new Date(t.exitDate);
+      const start = new Date(d);
+      start.setDate(d.getDate() - d.getDay());
+      const key = format(start, "MMM d");
+      const existing = map.get(key) ?? { pnl: 0, ts: start.getTime() };
+      existing.pnl += t.netPnl ?? 0;
+      map.set(key, existing);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => a[1].ts - b[1].ts)
+      .map(([week, { pnl }]) => ({ week, pnl: parseFloat(pnl.toFixed(2)) }));
+  }, [closedTrades]);
+
+  // 8. Monthly P&L
+  const monthlyData = useMemo(() => {
+    const map = new Map<string, { pnl: number; ts: number }>();
+    for (const t of closedTrades) {
+      if (!t.exitDate) continue;
+      const d = new Date(t.exitDate);
+      const key = format(d, "MMM yyyy");
+      const existing = map.get(key) ?? { pnl: 0, ts: new Date(d.getFullYear(), d.getMonth(), 1).getTime() };
+      existing.pnl += t.netPnl ?? 0;
+      map.set(key, existing);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => a[1].ts - b[1].ts)
+      .map(([month, { pnl }]) => ({ month, pnl: parseFloat(pnl.toFixed(2)) }));
+  }, [closedTrades]);
+
+  // 9. Win/Loss pie data
+  const winLossPieData = useMemo(() => {
+    const breakeven = closedTrades.filter((t) => (t.netPnl ?? 0) === 0).length;
+    const data = [
+      { name: "Wins", value: winners.length, fill: "#22c55e" },
+      { name: "Losses", value: losers.length, fill: "#ef4444" },
+    ];
+    if (breakeven > 0) data.push({ name: "Breakeven", value: breakeven, fill: "#6b7280" });
+    return data;
+  }, [closedTrades, winners, losers]);
+
+  // 10. Drawdown chart
+  const drawdownData = useMemo(() => {
+    const sorted = [...closedTrades].sort(
+      (a, b) => (a.exitDate ?? a.entryDate ?? 0) - (b.exitDate ?? b.entryDate ?? 0)
+    );
+    let peak = 0;
+    let cum = 0;
+    return sorted.map((t, i) => {
+      cum += t.netPnl ?? 0;
+      if (cum > peak) peak = cum;
+      return { trade: i + 1, drawdown: -parseFloat((peak - cum).toFixed(2)) };
+    });
   }, [closedTrades]);
 
   // ---------------------------------------------------------------------------
@@ -471,6 +600,61 @@ export default function Analytics() {
                   </span>
                 }
                 sub={`${bestTrade?.symbol ?? "—"} / ${worstTrade?.symbol ?? "—"}`}
+              />
+            </div>
+
+            {/* Advanced stats row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard
+                label="Risk / Reward"
+                value={
+                  <span className={riskRewardRatio >= 1 ? "text-green-400" : "text-red-400"}>
+                    {riskRewardRatio === Infinity ? "∞" : riskRewardRatio.toFixed(2)}
+                  </span>
+                }
+                sub="Avg Win / Avg Loss"
+              />
+              <StatCard
+                label="Sharpe Ratio"
+                value={
+                  <span className={sharpeRatio >= 0 ? "text-green-400" : "text-red-400"}>
+                    {sharpeRatio.toFixed(2)}
+                  </span>
+                }
+                sub="Risk-adjusted return"
+              />
+              <StatCard
+                label="Max Drawdown"
+                value={
+                  <span className="text-red-400">
+                    {formatCurrency(-maxDrawdown)}
+                  </span>
+                }
+                sub={maxDrawdownPct > 0 ? `${maxDrawdownPct.toFixed(1)}% from peak` : "No drawdown"}
+              />
+              <StatCard
+                label="Recovery Factor"
+                value={
+                  <span className={recoveryFactor >= 1 ? "text-green-400" : "text-yellow-400"}>
+                    {recoveryFactor === Infinity ? "∞" : recoveryFactor.toFixed(2)}
+                  </span>
+                }
+                sub="P&L / Max Drawdown"
+              />
+              <StatCard
+                label="Streaks"
+                value={
+                  <span className="text-foreground">
+                    {maxWinStreak}W / {maxLossStreak}L
+                  </span>
+                }
+                sub={
+                  currentStreak === 0
+                    ? "No active streak"
+                    : currentStreak > 0
+                    ? `Current: ${currentStreak} win streak`
+                    : `Current: ${Math.abs(currentStreak)} loss streak`
+                }
               />
             </div>
 
@@ -786,6 +970,148 @@ export default function Analytics() {
                             ))}
                           </Bar>
                         </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </CardContent>
+                </Card>
+              </section>
+            </div>
+
+            {/* Weekly & Monthly P&L side by side */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              {/* Weekly P&L */}
+              <section className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <BarChart2 className="h-4 w-4 text-muted-foreground" />
+                  <h2 className="text-base font-semibold">Weekly P&L</h2>
+                </div>
+                <Card className="bg-card/60">
+                  <CardContent className="pt-4">
+                    {weeklyData.length === 0 ? (
+                      <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
+                        Not enough data
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={200}>
+                        <BarChart data={weeklyData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                          <XAxis dataKey="week" tick={{ fontSize: 10, fill: "#6b7280" }} tickLine={false} axisLine={false} />
+                          <YAxis tickFormatter={(v) => formatCurrency(v, 0)} tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} width={70} />
+                          <RechartsTooltip content={<DarkTooltip labelFormatter={(l) => `Week of ${l}`} />} />
+                          <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
+                          <Bar dataKey="pnl" radius={[3, 3, 0, 0]} maxBarSize={40}>
+                            {weeklyData.map((e, i) => (
+                              <Cell key={i} fill={e.pnl >= 0 ? "#22c55e" : "#ef4444"} fillOpacity={0.85} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </CardContent>
+                </Card>
+              </section>
+
+              {/* Monthly P&L */}
+              <section className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <BarChart2 className="h-4 w-4 text-muted-foreground" />
+                  <h2 className="text-base font-semibold">Monthly P&L</h2>
+                </div>
+                <Card className="bg-card/60">
+                  <CardContent className="pt-4">
+                    {monthlyData.length === 0 ? (
+                      <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
+                        Not enough data
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={200}>
+                        <BarChart data={monthlyData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                          <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#6b7280" }} tickLine={false} axisLine={false} />
+                          <YAxis tickFormatter={(v) => formatCurrency(v, 0)} tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} width={70} />
+                          <RechartsTooltip content={<DarkTooltip labelFormatter={(l) => l} />} />
+                          <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
+                          <Bar dataKey="pnl" radius={[3, 3, 0, 0]} maxBarSize={40}>
+                            {monthlyData.map((e, i) => (
+                              <Cell key={i} fill={e.pnl >= 0 ? "#22c55e" : "#ef4444"} fillOpacity={0.85} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </CardContent>
+                </Card>
+              </section>
+            </div>
+
+            {/* Win/Loss Pie & Drawdown Chart side by side */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              {/* Win/Loss Pie */}
+              <section className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-muted-foreground" />
+                  <h2 className="text-base font-semibold">Win / Loss Distribution</h2>
+                </div>
+                <Card className="bg-card/60">
+                  <CardContent className="pt-4">
+                    <ResponsiveContainer width="100%" height={220}>
+                      <PieChart>
+                        <Pie
+                          data={winLossPieData}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={80}
+                          label={({ name, value }) => `${name}: ${value}`}
+                          labelLine={{ stroke: "#6b7280" }}
+                        >
+                          {winLossPieData.map((entry, i) => (
+                            <Cell key={i} fill={entry.fill} />
+                          ))}
+                        </Pie>
+                        <RechartsTooltip
+                          contentStyle={{
+                            backgroundColor: "#18181b",
+                            border: "1px solid #27272a",
+                            borderRadius: "8px",
+                            fontSize: "12px",
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </section>
+
+              {/* Drawdown Chart */}
+              <section className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <TrendingDown className="h-4 w-4 text-muted-foreground" />
+                  <h2 className="text-base font-semibold">Drawdown</h2>
+                </div>
+                <Card className="bg-card/60">
+                  <CardContent className="pt-4">
+                    {drawdownData.length === 0 ? (
+                      <div className="flex items-center justify-center h-[220px] text-muted-foreground text-sm">
+                        No data
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={220}>
+                        <AreaChart data={drawdownData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="ddGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
+                              <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                          <XAxis dataKey="trade" tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} />
+                          <YAxis tickFormatter={(v) => formatCurrency(v, 0)} tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} width={70} />
+                          <RechartsTooltip content={<DarkTooltip labelFormatter={(l) => `Trade #${l}`} />} />
+                          <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" />
+                          <Area type="monotone" dataKey="drawdown" stroke="#ef4444" strokeWidth={2} fill="url(#ddGrad)" dot={false} />
+                        </AreaChart>
                       </ResponsiveContainer>
                     )}
                   </CardContent>
