@@ -1,5 +1,4 @@
 import { createContext, useContext, useState } from "react";
-import { startOfMonth, endOfDay } from "date-fns";
 
 interface DateRange {
   from: Date | undefined;
@@ -22,8 +21,8 @@ const DateRangeContext = createContext<DateRangeContextValue>({
 
 export function DateRangeProvider({ children }: { children: React.ReactNode }) {
   const [dateRange, setDateRange] = useState<DateRange>({
-    from: startOfMonth(new Date()),
-    to: endOfDay(new Date()),
+    from: undefined,
+    to: undefined,
   });
 
   const startDate = dateRange.from?.getTime();
