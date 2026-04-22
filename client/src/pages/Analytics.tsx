@@ -659,6 +659,7 @@ export default function Analytics() {
                       />
                       <RechartsTooltip
                         content={<DarkTooltip labelFormatter={(l) => l} />}
+                        cursor={{ fill: 'rgba(255,255,255,0.04)' }}
                       />
                       <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" strokeDasharray="4 4" />
                       <Area
@@ -702,6 +703,7 @@ export default function Analytics() {
                       />
                       <RechartsTooltip
                         content={<DarkTooltip labelFormatter={(l) => l} />}
+                        cursor={{ fill: 'rgba(255,255,255,0.04)' }}
                       />
                       <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
                       <Bar dataKey="pnl" radius={[3, 3, 0, 0]} maxBarSize={40}>
@@ -752,6 +754,7 @@ export default function Analytics() {
                           width={30}
                         />
                         <RechartsTooltip
+                          cursor={{ fill: 'rgba(255,255,255,0.04)' }}
                           content={({ active, payload, label }) =>
                             active && payload && payload.length ? (
                               <div className="rounded-lg border border-border bg-zinc-900 px-3 py-2 shadow-xl text-sm">
@@ -813,6 +816,7 @@ export default function Analytics() {
                         />
                         <RechartsTooltip
                           content={<DarkTooltip labelFormatter={(l) => l} />}
+                          cursor={{ fill: 'rgba(255,255,255,0.04)' }}
                         />
                         <ReferenceLine x={0} stroke="rgba(255,255,255,0.2)" />
                         <Bar dataKey="pnl" radius={[0, 3, 3, 0]} maxBarSize={20}>
@@ -866,6 +870,7 @@ export default function Analytics() {
                               labelFormatter={(l) => `${l} (avg)`}
                             />
                           }
+                          cursor={{ fill: 'rgba(255,255,255,0.04)' }}
                         />
                         <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
                         <Bar dataKey="pnl" radius={[3, 3, 0, 0]} maxBarSize={40}>
@@ -921,6 +926,7 @@ export default function Analytics() {
                                 labelFormatter={(l) => `${l} (avg)`}
                               />
                             }
+                            cursor={{ fill: 'rgba(255,255,255,0.04)' }}
                           />
                           <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
                           <Bar dataKey="pnl" radius={[3, 3, 0, 0]} maxBarSize={32}>
@@ -960,7 +966,7 @@ export default function Analytics() {
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                           <XAxis dataKey="week" tick={{ fontSize: 10, fill: "#6b7280" }} tickLine={false} axisLine={false} />
                           <YAxis tickFormatter={(v) => formatCurrency(v, 0)} tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} width={70} />
-                          <RechartsTooltip content={<DarkTooltip labelFormatter={(l) => `Week of ${l}`} />} />
+                          <RechartsTooltip content={<DarkTooltip labelFormatter={(l) => `Week of ${l}`} />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
                           <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
                           <Bar dataKey="pnl" radius={[3, 3, 0, 0]} maxBarSize={40}>
                             {weeklyData.map((e, i) => (
@@ -992,7 +998,7 @@ export default function Analytics() {
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                           <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#6b7280" }} tickLine={false} axisLine={false} />
                           <YAxis tickFormatter={(v) => formatCurrency(v, 0)} tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} width={70} />
-                          <RechartsTooltip content={<DarkTooltip labelFormatter={(l) => l} />} />
+                          <RechartsTooltip content={<DarkTooltip labelFormatter={(l) => l} />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
                           <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
                           <Bar dataKey="pnl" radius={[3, 3, 0, 0]} maxBarSize={40}>
                             {monthlyData.map((e, i) => (
@@ -1073,7 +1079,7 @@ export default function Analytics() {
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                           <XAxis dataKey="trade" tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} />
                           <YAxis tickFormatter={(v) => formatCurrency(v, 0)} tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} width={70} />
-                          <RechartsTooltip content={<DarkTooltip labelFormatter={(l) => `Trade #${l}`} />} />
+                          <RechartsTooltip content={<DarkTooltip labelFormatter={(l) => `Trade #${l}`} />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
                           <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" />
                           <Area type="monotone" dataKey="drawdown" stroke="#ef4444" strokeWidth={2} fill="url(#ddGrad)" dot={false} />
                         </AreaChart>

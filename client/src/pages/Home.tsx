@@ -489,7 +489,7 @@ export default function HomePage() {
                     }
                     width={52}
                   />
-                  <Tooltip content={<ChartTooltip />} />
+                  <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
                   <Area
                     type="monotone"
                     dataKey="cumPnl"
