@@ -240,14 +240,18 @@ const DATE_PRESETS: { value: DatePreset; label: string }[] = [
 ];
 
 function DateRangeSelector() {
-  const { preset, label, setPreset } = useDateRange();
+  const { preset, label, setPreset, setCustomRange, dateRange } = useDateRange();
   const [open, setOpen] = React.useState(false);
+  const [showCustom, setShowCustom] = React.useState(false);
+  const [customFrom, setCustomFrom] = React.useState("");
+  const [customTo, setCustomTo] = React.useState("");
   const ref = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false);
+        setShowCustom(false);
       }
     }
     document.addEventListener("mousedown", handleClick);
@@ -279,18 +283,66 @@ function DateRangeSelector() {
               key={p.value}
               className={cn(
                 "flex w-full items-center px-3 py-2 text-sm transition-colors hover:bg-accent",
-                preset === p.value
+                preset === p.value && !showCustom
                   ? "text-primary font-medium"
                   : "text-foreground"
               )}
               onClick={() => {
                 setPreset(p.value);
+                setShowCustom(false);
                 setOpen(false);
               }}
             >
               {p.label}
             </button>
           ))}
+          <div className="border-t border-border" />
+          <button
+            className={cn(
+              "flex w-full items-center px-3 py-2 text-sm transition-colors hover:bg-accent",
+              preset === "custom"
+                ? "text-primary font-medium"
+                : "text-foreground"
+            )}
+            onClick={() => setShowCustom((v) => !v)}
+          >
+            Custom Range
+          </button>
+          {showCustom && (
+            <div className="px-3 pb-3 pt-1 space-y-2">
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">From</label>
+                <input
+                  type="date"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">To</label>
+                <input
+                  type="date"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+              <Button
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  const from = customFrom ? new Date(customFrom + "T00:00:00") : null;
+                  const to = customTo ? new Date(customTo + "T23:59:59") : null;
+                  setCustomRange(from, to);
+                  setOpen(false);
+                  setShowCustom(false);
+                }}
+              >
+                Apply
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>

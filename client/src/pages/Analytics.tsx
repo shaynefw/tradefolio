@@ -1034,12 +1034,14 @@ export default function Analytics() {
                           ))}
                         </Pie>
                         <RechartsTooltip
-                          contentStyle={{
-                            backgroundColor: "#18181b",
-                            border: "1px solid #27272a",
-                            borderRadius: "8px",
-                            fontSize: "12px",
-                          }}
+                          content={({ active, payload }) =>
+                            active && payload && payload.length ? (
+                              <div className="rounded-lg border border-border bg-zinc-900 px-3 py-2 shadow-xl text-sm">
+                                <p className="text-foreground font-semibold">{payload[0].name}</p>
+                                <p className="text-muted-foreground">{payload[0].value} trades</p>
+                              </div>
+                            ) : null
+                          }
                         />
                       </PieChart>
                     </ResponsiveContainer>

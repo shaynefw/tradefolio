@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { trpc } from "../lib/trpc";
 import { useAccount } from "../contexts/AccountContext";
 import { useStrategy } from "../contexts/StrategyContext";
+import { useDateRange } from "../contexts/DateRangeContext";
 import { cn, formatCurrency, formatDate, pnlColor } from "../lib/utils";
 import DashboardLayout from "../components/DashboardLayout";
 import { Card, CardContent } from "../components/ui/card";
@@ -92,16 +93,21 @@ export default function Calendar() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const { selectedAccountId, accounts, setSelectedAccountId } = useAccount();
   const { selectedStrategyId } = useStrategy();
+  const { startDate, endDate } = useDateRange();
   const [selectedDay, setSelectedDay] = useState<{ date: Date; trades: DayTrade[] } | null>(null);
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
 
+  // Use global date range if set, otherwise use month bounds
+  const queryStart = startDate ? tsToStr(Math.max(startDate, monthStart.getTime())) : tsToStr(monthStart.getTime());
+  const queryEnd = endDate ? tsToStr(Math.min(endDate, monthEnd.getTime())) : tsToStr(monthEnd.getTime());
+
   const { data: trades = [], isLoading } = trpc.trade.list.useQuery({
     accountId: selectedAccountId ?? undefined,
     strategyId: selectedStrategyId ?? undefined,
-    startDate: tsToStr(monthStart.getTime()),
-    endDate: tsToStr(monthEnd.getTime()),
+    startDate: queryStart,
+    endDate: queryEnd,
   });
 
   // ---------------------------------------------------------------------------
@@ -182,6 +188,27 @@ export default function Calendar() {
       return { dayNum, date, inMonth: true, stats };
     });
   }, [currentMonth, monthStart, dayStatsMap]);
+
+  // ---------------------------------------------------------------------------
+  // Weekly totals (one per row = 6 rows)
+  // ---------------------------------------------------------------------------
+
+  const weeklyTotals = useMemo(() => {
+    const weeks: Array<{ pnl: number; count: number }> = [];
+    for (let row = 0; row < 6; row++) {
+      let pnl = 0;
+      let count = 0;
+      for (let col = 0; col < 7; col++) {
+        const cell = calendarGrid[row * 7 + col];
+        if (cell?.inMonth && cell.stats) {
+          pnl += cell.stats.pnl;
+          count += cell.stats.count;
+        }
+      }
+      weeks.push({ pnl: parseFloat(pnl.toFixed(2)), count });
+    }
+    return weeks;
+  }, [calendarGrid]);
 
   // ---------------------------------------------------------------------------
   // Monthly summary stats
@@ -301,8 +328,8 @@ export default function Calendar() {
         {!isLoading && (
           <Card className="bg-card/60 overflow-hidden">
             <CardContent className="p-0">
-              {/* Day of week header */}
-              <div className="grid grid-cols-7 border-b border-border">
+              {/* Day of week header + Week column */}
+              <div className="grid grid-cols-[repeat(7,1fr)_minmax(90px,0.8fr)] border-b border-border">
                 {DOW_LABELS.map((d) => (
                   <div
                     key={d}
@@ -311,87 +338,105 @@ export default function Calendar() {
                     {d}
                   </div>
                 ))}
+                <div className="py-2 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider border-l border-border">
+                  Weekly
+                </div>
               </div>
 
-              {/* Days grid */}
-              <div className="grid grid-cols-7">
-                {calendarGrid.map((cell, idx) => {
-                  const isToday =
-                    cell.date ? isSameDay(cell.date, today) : false;
-                  const stats = cell.inMonth ? cell.stats : undefined;
-                  const hasTrades = stats && stats.count > 0;
+              {/* Days grid with weekly totals */}
+              {Array.from({ length: 6 }, (_, row) => (
+                <div key={row} className="grid grid-cols-[repeat(7,1fr)_minmax(90px,0.8fr)]">
+                  {calendarGrid.slice(row * 7, row * 7 + 7).map((cell, colIdx) => {
+                    const idx = row * 7 + colIdx;
+                    const isToday =
+                      cell.date ? isSameDay(cell.date, today) : false;
+                    const stats = cell.inMonth ? cell.stats : undefined;
+                    const hasTrades = stats && stats.count > 0;
 
-                  return (
-                    <div
-                      key={idx}
-                      onClick={() => {
-                        if (!cell.inMonth || !cell.date) return;
-                        const key = format(cell.date, "yyyy-MM-dd");
-                        const dayTrades = dayTradesMap.get(key) ?? [];
-                        if (dayTrades.length > 0) {
-                          setSelectedDay({ date: cell.date, trades: dayTrades });
-                        }
-                      }}
-                      className={cn(
-                        "min-h-[90px] border-b border-r border-border/50 p-2 transition-colors",
-                        "last:border-r-0",
-                        // remove right border on every 7th cell
-                        (idx + 1) % 7 === 0 ? "border-r-0" : "",
-                        cell.inMonth
-                          ? cn(
-                              dayCellBg(stats, true),
-                              hasTrades
-                                ? "hover:brightness-110 cursor-pointer"
-                                : "cursor-default"
-                            )
-                          : "bg-transparent"
-                      )}
-                    >
-                      {cell.inMonth && (
-                        <div className="flex flex-col h-full gap-1">
-                          {/* Day number */}
-                          <div className="flex items-start justify-between">
-                            <span
-                              className={cn(
-                                "text-xs font-medium leading-none",
-                                isToday
-                                  ? "flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-[11px]"
-                                  : hasTrades
-                                  ? "text-foreground/80"
-                                  : "text-muted-foreground/50"
-                              )}
-                            >
-                              {cell.dayNum}
-                            </span>
-
-                            {/* Trade count badge */}
-                            {hasTrades && (
-                              <span className="text-[10px] font-medium text-muted-foreground bg-black/20 rounded px-1 leading-4">
-                                {stats.count}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* P&L amount */}
-                          {hasTrades && (
-                            <div className="flex-1 flex items-end">
+                    return (
+                      <div
+                        key={idx}
+                        onClick={() => {
+                          if (!cell.inMonth || !cell.date) return;
+                          const key = format(cell.date, "yyyy-MM-dd");
+                          const dayTrades = dayTradesMap.get(key) ?? [];
+                          if (dayTrades.length > 0) {
+                            setSelectedDay({ date: cell.date, trades: dayTrades });
+                          }
+                        }}
+                        className={cn(
+                          "min-h-[90px] border-b border-r border-border/50 p-2 transition-colors",
+                          cell.inMonth
+                            ? cn(
+                                dayCellBg(stats, true),
+                                hasTrades
+                                  ? "hover:brightness-110 cursor-pointer"
+                                  : "cursor-default"
+                              )
+                            : "bg-transparent"
+                        )}
+                      >
+                        {cell.inMonth && (
+                          <div className="flex flex-col h-full gap-1">
+                            <div className="flex items-start justify-between">
                               <span
                                 className={cn(
-                                  "text-xs font-semibold leading-none",
-                                  pnlColor(stats.pnl)
+                                  "text-xs font-medium leading-none",
+                                  isToday
+                                    ? "flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-[11px]"
+                                    : hasTrades
+                                    ? "text-foreground/80"
+                                    : "text-muted-foreground/50"
                                 )}
                               >
-                                {stats.pnl >= 0 ? "+" : ""}
-                                {formatCurrency(stats.pnl, 0)}
+                                {cell.dayNum}
                               </span>
+                              {hasTrades && (
+                                <span className="text-[10px] font-medium text-muted-foreground bg-black/20 rounded px-1 leading-4">
+                                  {stats.count}
+                                </span>
+                              )}
                             </div>
-                          )}
-                        </div>
+                            {hasTrades && (
+                              <div className="flex-1 flex items-end">
+                                <span
+                                  className={cn(
+                                    "text-xs font-semibold leading-none",
+                                    pnlColor(stats.pnl)
+                                  )}
+                                >
+                                  {stats.pnl >= 0 ? "+" : ""}
+                                  {formatCurrency(stats.pnl, 0)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Weekly total cell */}
+                  <div className="min-h-[90px] border-b border-border/50 border-l border-border p-2 flex flex-col items-center justify-center gap-0.5 bg-card/30">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Week {row + 1}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-base font-bold",
+                        weeklyTotals[row].count > 0
+                          ? pnlColor(weeklyTotals[row].pnl)
+                          : "text-muted-foreground"
                       )}
-                    </div>
-                  );
-                })}
-              </div>
+                    >
+                      {formatCurrency(weeklyTotals[row].pnl)}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {weeklyTotals[row].count} trade{weeklyTotals[row].count !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </CardContent>
           </Card>
         )}

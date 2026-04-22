@@ -221,7 +221,7 @@ function ChartTooltip({
   if (!active || !payload?.length) return null;
   const val = payload[0].value;
   return (
-    <div className="rounded-md border border-border bg-popover px-3 py-2 shadow-lg">
+    <div className="rounded-lg border border-border bg-zinc-900 px-3 py-2 shadow-xl">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p
         className={cn(
