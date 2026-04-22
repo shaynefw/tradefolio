@@ -446,6 +446,34 @@ export const tradeRouter = router({
       return { updated: ownedIds.length };
     }),
 
+  bulkSetStrategy: protectedProcedure
+    .input(
+      z.object({
+        tradeIds: z.array(z.number()).min(1),
+        strategyId: z.number().nullable(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+
+      const owned = await db
+        .select({ id: schema.trades.id })
+        .from(schema.trades)
+        .where(and(eq(schema.trades.userId, userId), inArray(schema.trades.id, input.tradeIds)));
+
+      const ownedIds = owned.map((t) => t.id);
+      if (ownedIds.length === 0) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "No trades found" });
+      }
+
+      await db
+        .update(schema.trades)
+        .set({ strategyId: input.strategyId, updatedAt: new Date() })
+        .where(inArray(schema.trades.id, ownedIds));
+
+      return { updated: ownedIds.length };
+    }),
+
   importCSV: protectedProcedure
     .input(
       z.object({

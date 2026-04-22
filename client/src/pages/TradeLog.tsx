@@ -53,6 +53,7 @@ import {
   ChevronRight,
   Search,
   Tags,
+  Target,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -113,6 +114,8 @@ export default function TradeLog() {
   const [showBulkTag, setShowBulkTag] = useState(false);
   const [bulkTagAdd, setBulkTagAdd] = useState<Set<number>>(new Set());
   const [bulkTagRemove, setBulkTagRemove] = useState<Set<number>>(new Set());
+  const [showBulkStrategy, setShowBulkStrategy] = useState(false);
+  const [bulkStrategyId, setBulkStrategyId] = useState<string>("none");
   const [form, setForm] = useState<NewTradeForm>(defaultForm);
 
   const startDateStr = startDate ? format(new Date(startDate), "MM/dd/yyyy") : undefined;
@@ -156,6 +159,16 @@ export default function TradeLog() {
       setBulkTagRemove(new Set());
       refetch();
       setShowBulkTag(false);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const bulkSetStrategyMutation = trpc.trade.bulkSetStrategy.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Strategy updated for ${data.updated} trades`);
+      setSelected(new Set());
+      refetch();
+      setShowBulkStrategy(false);
     },
     onError: (err) => toast.error(err.message),
   });
@@ -353,7 +366,20 @@ export default function TradeLog() {
                 }}
               >
                 <Tags className="h-4 w-4 mr-1" />
-                Tag Selected
+                Tags
+              </Button>
+            )}
+            {strategies.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setBulkStrategyId("none");
+                  setShowBulkStrategy(true);
+                }}
+              >
+                <Target className="h-4 w-4 mr-1" />
+                Strategy
               </Button>
             )}
             <Button
@@ -362,7 +388,7 @@ export default function TradeLog() {
               onClick={() => setShowBulkDelete(true)}
             >
               <Trash2 className="h-4 w-4 mr-1" />
-              Delete Selected
+              Delete
             </Button>
             <Button
               variant="ghost"
@@ -782,6 +808,51 @@ export default function TradeLog() {
               disabled={bulkAssignTagsMutation.isPending || (bulkTagAdd.size === 0 && bulkTagRemove.size === 0)}
             >
               {bulkAssignTagsMutation.isPending ? "Applying..." : "Apply Tags"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk strategy dialog */}
+      <Dialog open={showBulkStrategy} onOpenChange={(o) => setShowBulkStrategy(o)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Set Strategy for {selected.size} Trade{selected.size !== 1 ? "s" : ""}</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <Select value={bulkStrategyId} onValueChange={setBulkStrategyId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a strategy" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="clear">
+                  <span className="text-muted-foreground">Remove strategy</span>
+                </SelectItem>
+                {strategies.map((s) => (
+                  <SelectItem key={s.id} value={String(s.id)}>
+                    <span className="flex items-center gap-2">
+                      {s.color && (
+                        <span className="h-2 w-2 rounded-full inline-block" style={{ backgroundColor: s.color }} />
+                      )}
+                      {s.name}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBulkStrategy(false)}>Cancel</Button>
+            <Button
+              onClick={() =>
+                bulkSetStrategyMutation.mutate({
+                  tradeIds: Array.from(selected),
+                  strategyId: bulkStrategyId === "clear" ? null : Number(bulkStrategyId),
+                })
+              }
+              disabled={bulkSetStrategyMutation.isPending || bulkStrategyId === "none"}
+            >
+              {bulkSetStrategyMutation.isPending ? "Applying..." : "Apply Strategy"}
             </Button>
           </DialogFooter>
         </DialogContent>
