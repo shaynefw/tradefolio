@@ -12,6 +12,7 @@ import {
   TrendingUp,
   LogOut,
   ChevronDown,
+  Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -19,6 +20,7 @@ import { trpc } from "../lib/trpc";
 import { useAuth } from "../contexts/AuthContext";
 import { useAccount } from "../contexts/AccountContext";
 import { useStrategy } from "../contexts/StrategyContext";
+import { useDateRange, type DatePreset } from "../contexts/DateRangeContext";
 import { cn } from "../lib/utils";
 import { Button } from "./ui/button";
 
@@ -225,6 +227,77 @@ function StrategySelector() {
 }
 
 // ---------------------------------------------------------------------------
+// Date range selector (sidebar-friendly)
+// ---------------------------------------------------------------------------
+
+const DATE_PRESETS: { value: DatePreset; label: string }[] = [
+  { value: "all", label: "All Time" },
+  { value: "today", label: "Today" },
+  { value: "7d", label: "Last 7 Days" },
+  { value: "30d", label: "Last 30 Days" },
+  { value: "90d", label: "Last 90 Days" },
+  { value: "ytd", label: "Year to Date" },
+];
+
+function DateRangeSelector() {
+  const { preset, label, setPreset } = useDateRange();
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between rounded-md border border-border bg-muted/50 px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent focus:outline-none"
+      >
+        <span className="flex items-center gap-2 truncate">
+          <Calendar className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="truncate">{label}</span>
+        </span>
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
+            open && "rotate-180"
+          )}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-border bg-popover shadow-lg">
+          {DATE_PRESETS.map((p) => (
+            <button
+              key={p.value}
+              className={cn(
+                "flex w-full items-center px-3 py-2 text-sm transition-colors hover:bg-accent",
+                preset === p.value
+                  ? "text-primary font-medium"
+                  : "text-foreground"
+              )}
+              onClick={() => {
+                setPreset(p.value);
+                setOpen(false);
+              }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Sidebar
 // ---------------------------------------------------------------------------
 
@@ -266,6 +339,9 @@ function Sidebar() {
 
         {/* Strategy selector */}
         <StrategySelector />
+
+        {/* Date range */}
+        <DateRangeSelector />
 
         {/* Nav */}
         <nav className="flex flex-1 flex-col gap-0.5">

@@ -5,7 +5,6 @@ import { useDateRange } from "../contexts/DateRangeContext";
 import { useStrategy } from "../contexts/StrategyContext";
 import { cn, formatCurrency, formatDate, pnlColor } from "../lib/utils";
 import DashboardLayout from "../components/DashboardLayout";
-import { DateRangePicker } from "../components/DateRangePicker";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import {
   Select,
@@ -447,8 +446,6 @@ export default function Analytics() {
 
           {/* Filters row */}
           <div className="flex flex-wrap items-center gap-3">
-            <DateRangePicker />
-
             <Select
               value={selectedAccountId != null ? String(selectedAccountId) : "all"}
               onValueChange={(v) =>
