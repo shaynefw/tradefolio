@@ -628,6 +628,17 @@ export default function ImportTrades() {
   const [accountId, setAccountId]       = useState<string>("");
   const [skipDuplicates, setSkipDuplicates] = useState(true);
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number } | null>(null);
+  const step2Ref = useRef<HTMLDivElement>(null);
+  const step3Ref = useRef<HTMLDivElement>(null);
+
+  // Scroll the newly-revealed step into view
+  React.useEffect(() => {
+    if (step === 2) {
+      setTimeout(() => step2Ref.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    } else if (step === 3) {
+      setTimeout(() => step3Ref.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    }
+  }, [step]);
 
   const accountsQuery = trpc.account.list.useQuery();
   const utils = trpc.useUtils();
@@ -732,7 +743,7 @@ export default function ImportTrades() {
             {step >= 2 && parseResult && (
               <>
                 <Separator />
-                <div className="space-y-4">
+                <div ref={step2Ref} className="space-y-4 scroll-mt-6">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <h2 className="text-sm font-semibold flex items-center gap-2">
                       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold">2</span>
@@ -774,7 +785,7 @@ export default function ImportTrades() {
             {step >= 3 && parseResult && (
               <>
                 <Separator />
-                <div className="space-y-5">
+                <div ref={step3Ref} className="space-y-5 scroll-mt-6">
                   <h2 className="text-sm font-semibold flex items-center gap-2">
                     <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold">3</span>
                     Configure &amp; Import
