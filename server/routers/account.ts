@@ -22,7 +22,7 @@ export const accountRouter = router({
         createdAt: schema.accounts.createdAt,
         updatedAt: schema.accounts.updatedAt,
         tradeCount: sql<number>`(
-          SELECT COUNT(*) FROM trades WHERE trades.account_id = ${schema.accounts.id}
+          SELECT COUNT(*) FROM trades WHERE trades.account_id = accounts.id AND trades.user_id = ${userId}
         )`.as("trade_count"),
       })
       .from(schema.accounts)
