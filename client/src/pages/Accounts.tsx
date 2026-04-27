@@ -11,7 +11,6 @@ import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
 import { Card, CardContent } from "../components/ui/card"
-import { Badge } from "../components/ui/badge"
 import { Textarea } from "../components/ui/textarea"
 import { Checkbox } from "../components/ui/checkbox"
 import {
@@ -192,7 +191,7 @@ export default function Accounts() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {accounts.map((account) => (
               <AccountCard
                 key={account.id}
@@ -286,98 +285,92 @@ function AccountCard({
   onExport: () => void
   onImport: () => void
 }) {
+  const accountColor = account.color ?? "#6366f1"
+  const initial = account.name.trim().charAt(0).toUpperCase() || "?"
+
   return (
     <Card className="overflow-hidden">
-      <div className="flex">
-        {/* Colored stripe */}
-        <div
-          className="w-1.5 flex-shrink-0"
-          style={{ backgroundColor: account.color ?? undefined }}
-        />
-        <CardContent className="flex-1 p-4">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="font-semibold truncate">{account.name}</p>
-                {account.isDefault && (
-                  <Badge
-                    variant="outline"
-                    className="text-xs border-yellow-500/40 text-yellow-400 bg-yellow-500/10"
-                  >
-                    Default
-                  </Badge>
-                )}
-              </div>
-              {(account.broker || account.accountNumber) && (
-                <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                  {[account.broker, account.accountNumber]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </p>
-              )}
-              {account.description && (
-                <p className="text-sm text-muted-foreground mt-1.5 line-clamp-2">
-                  {account.description}
-                </p>
-              )}
-              <div className="mt-3 flex items-center gap-2">
-                {account.tradeCount != null && (
-                  <Badge variant="secondary" className="text-xs">
-                    {account.tradeCount} trade{account.tradeCount !== 1 ? "s" : ""}
-                  </Badge>
-                )}
-              </div>
-            </div>
+      {/* Colored top stripe */}
+      <div
+        className="h-1 w-full"
+        style={{ backgroundColor: accountColor }}
+      />
+      <CardContent className="p-5">
+        {/* Header: avatar + name + default star */}
+        <div className="flex items-center gap-3">
+          <div
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-base font-semibold text-white"
+            style={{ backgroundColor: accountColor }}
+          >
+            {initial}
           </div>
-          <div className="mt-3 flex items-center gap-1">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="truncate text-base font-semibold">{account.name}</p>
+              {account.isDefault && (
+                <Star
+                  className="h-4 w-4 shrink-0 fill-yellow-400 text-yellow-400"
+                  aria-label="Default account"
+                />
+              )}
+            </div>
+            {(account.broker || account.accountNumber) && (
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                {[account.broker, account.accountNumber]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Backup / Restore buttons */}
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <Button variant="outline" size="sm" onClick={onExport}>
+            <Download className="mr-1.5 h-3.5 w-3.5" />
+            Backup
+          </Button>
+          <Button variant="outline" size="sm" onClick={onImport}>
+            <Upload className="mr-1.5 h-3.5 w-3.5" />
+            Restore
+          </Button>
+        </div>
+
+        {/* Bottom action row: Set Default (if applicable) + Edit | Delete */}
+        <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
+          <div className="flex items-center gap-1">
             {!account.isDefault && (
               <Button
                 variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-yellow-400"
+                size="sm"
+                className="h-8 px-2 text-muted-foreground hover:text-yellow-400"
                 onClick={onSetDefault}
-                title="Set as default"
               >
-                <Star className="h-3.5 w-3.5" />
+                <Star className="mr-1.5 h-3.5 w-3.5" />
+                Set Default
               </Button>
             )}
             <Button
               variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-              onClick={onExport}
-              title="Export backup"
-            >
-              <Download className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-              onClick={onImport}
-              title="Import backup"
-            >
-              <Upload className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              size="sm"
+              className="h-8 px-2 text-muted-foreground hover:text-foreground"
               onClick={onEdit}
             >
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-destructive"
-              onClick={onDelete}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
+              <Pencil className="mr-1.5 h-3.5 w-3.5" />
+              Edit
             </Button>
           </div>
-        </CardContent>
-      </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={onDelete}
+          >
+            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+            Delete
+          </Button>
+        </div>
+      </CardContent>
     </Card>
   )
 }
