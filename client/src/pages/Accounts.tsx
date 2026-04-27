@@ -7,6 +7,8 @@ import { Plus, Pencil, Trash2, Loader2, Star, Download, Upload } from "lucide-re
 import DashboardLayout from "../components/DashboardLayout"
 import { trpc } from "../lib/trpc"
 import { cn } from "../lib/utils"
+
+const ACCOUNT_LIMIT = 40
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
@@ -158,21 +160,50 @@ export default function Accounts() {
     input.click()
   }
 
+  async function handleExportAll() {
+    try {
+      const json = await utils.backup.export.fetch({})
+      const blob = new Blob([json], { type: "application/json" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `tradefolio-all-${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success("Backup exported")
+    } catch (err: any) {
+      toast.error(err.message ?? "Export failed")
+    }
+  }
+
   return (
     <DashboardLayout>
-      <div className="mx-auto max-w-6xl space-y-6 px-4 py-6">
+      <div className="space-y-6 px-6 py-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold">Accounts</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Manage your trading accounts
+              Manage your trading accounts and broker profiles
             </p>
           </div>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Account
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={handleExportAll}
+              disabled={accounts.length === 0}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Export All
+            </Button>
+            <Button
+              onClick={() => setCreateOpen(true)}
+              disabled={accounts.length >= ACCOUNT_LIMIT}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              New Account ({accounts.length}/{ACCOUNT_LIMIT})
+            </Button>
+          </div>
         </div>
 
         {/* Account List */}
@@ -191,7 +222,7 @@ export default function Accounts() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {accounts.map((account) => (
               <AccountCard
                 key={account.id}
