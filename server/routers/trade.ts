@@ -492,6 +492,7 @@ export const tradeRouter = router({
           })
         ),
         accountId: z.number().optional().nullable(),
+        skipDuplicates: z.boolean().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -511,6 +512,46 @@ export const tradeRouter = router({
 
       let imported = 0;
       let skipped = 0;
+
+      // Build a fingerprint set of existing trades for this user, so we can
+      // dedupe both against the database and within the incoming batch.
+      // Fingerprint matches on: symbol, side, entryDate, exitDate, entryPrice,
+      // exitPrice, quantity. This is what "identical trade" means in practice.
+      const fingerprint = (t: {
+        symbol: string | null;
+        side: string | null;
+        entryDate: number | null;
+        exitDate: number | null;
+        entryPrice: number | null;
+        exitPrice: number | null;
+        quantity: number | null;
+      }) =>
+        [
+          (t.symbol ?? "").toUpperCase(),
+          (t.side ?? "").toLowerCase(),
+          t.entryDate ?? "",
+          t.exitDate ?? "",
+          t.entryPrice ?? "",
+          t.exitPrice ?? "",
+          t.quantity ?? "",
+        ].join("|");
+
+      const seen = new Set<string>();
+      if (input.skipDuplicates) {
+        const existing = await db
+          .select({
+            symbol: schema.trades.symbol,
+            side: schema.trades.side,
+            entryDate: schema.trades.entryDate,
+            exitDate: schema.trades.exitDate,
+            entryPrice: schema.trades.entryPrice,
+            exitPrice: schema.trades.exitPrice,
+            quantity: schema.trades.quantity,
+          })
+          .from(schema.trades)
+          .where(eq(schema.trades.userId, userId));
+        for (const t of existing) seen.add(fingerprint(t));
+      }
 
       const toInsert: Array<Parameters<typeof db.insert>[0] extends (...args: infer A) => unknown ? never : never> = [];
 
@@ -557,17 +598,38 @@ export const tradeRouter = router({
         const netPnl = (pnl ?? 0) - fees;
         const entryDate = parseDateField(row.entryDate);
         const exitDate = parseDateField(row.exitDate);
+        const entryPrice = parseNum(row.entryPrice);
+        const exitPrice = parseNum(row.exitPrice);
+        const quantity = parseNum(row.quantity);
+
+        // Skip if it duplicates an existing trade or another row in this batch.
+        if (input.skipDuplicates) {
+          const fp = fingerprint({
+            symbol,
+            side: sideRaw,
+            entryDate,
+            exitDate,
+            entryPrice,
+            exitPrice,
+            quantity,
+          });
+          if (seen.has(fp)) {
+            skipped++;
+            continue;
+          }
+          seen.add(fp);
+        }
 
         values.push({
           userId,
           accountId: input.accountId ?? null,
           symbol,
           side: sideRaw as "long" | "short",
-          entryPrice: parseNum(row.entryPrice),
-          exitPrice: parseNum(row.exitPrice),
+          entryPrice,
+          exitPrice,
           entryDate,
           exitDate,
-          quantity: parseNum(row.quantity),
+          quantity,
           pnl,
           fees,
           netPnl,
@@ -581,8 +643,54 @@ export const tradeRouter = router({
         imported = values.length;
       }
 
-      skipped += input.rows.length - values.length - skipped;
-
       return { imported, skipped };
     }),
+
+  // Find groups of identical trades for the user (same symbol, side,
+  // entry/exit date, entry/exit price, quantity). Returns one entry per
+  // duplicate group with the matching trade IDs.
+  findDuplicates: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.user.id;
+
+    const rows = await db
+      .select({
+        id: schema.trades.id,
+        symbol: schema.trades.symbol,
+        side: schema.trades.side,
+        entryDate: schema.trades.entryDate,
+        exitDate: schema.trades.exitDate,
+        entryPrice: schema.trades.entryPrice,
+        exitPrice: schema.trades.exitPrice,
+        quantity: schema.trades.quantity,
+        netPnl: schema.trades.netPnl,
+        accountId: schema.trades.accountId,
+        createdAt: schema.trades.createdAt,
+      })
+      .from(schema.trades)
+      .where(eq(schema.trades.userId, userId));
+
+    type Row = (typeof rows)[number];
+    const groups = new Map<string, Row[]>();
+
+    for (const r of rows) {
+      const key = [
+        (r.symbol ?? "").toUpperCase(),
+        (r.side ?? "").toLowerCase(),
+        r.entryDate ?? "",
+        r.exitDate ?? "",
+        r.entryPrice ?? "",
+        r.exitPrice ?? "",
+        r.quantity ?? "",
+      ].join("|");
+      const arr = groups.get(key) ?? [];
+      arr.push(r);
+      groups.set(key, arr);
+    }
+
+    const duplicateGroups = Array.from(groups.values())
+      .filter((g) => g.length > 1)
+      .map((g) => g.sort((a, b) => (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0)));
+
+    return duplicateGroups;
+  }),
 });

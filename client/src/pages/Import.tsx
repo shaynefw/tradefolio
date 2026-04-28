@@ -646,7 +646,10 @@ export default function ImportTrades() {
   const importMutation = trpc.trade.importCSV.useMutation({
     onSuccess: (data) => {
       setImportResult({ imported: data.imported, skipped: data.skipped });
-      toast.success(`${data.imported} trade${data.imported !== 1 ? "s" : ""} imported.`);
+      const msg = data.skipped > 0
+        ? `${data.imported} imported, ${data.skipped} duplicate${data.skipped !== 1 ? "s" : ""} skipped.`
+        : `${data.imported} trade${data.imported !== 1 ? "s" : ""} imported.`;
+      toast.success(msg);
       utils.trade.list.invalidate();
     },
     onError: (err) => toast.error(err.message ?? "Import failed"),
@@ -696,6 +699,7 @@ export default function ImportTrades() {
         notes:       r.notes       ?? null,
       })),
       accountId: Number(accountId),
+      skipDuplicates,
     });
   };
 

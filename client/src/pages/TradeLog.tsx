@@ -54,6 +54,7 @@ import {
   Search,
   Tags,
   Target,
+  Copy,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -116,6 +117,7 @@ export default function TradeLog() {
   const [bulkTagRemove, setBulkTagRemove] = useState<Set<number>>(new Set());
   const [showBulkStrategy, setShowBulkStrategy] = useState(false);
   const [bulkStrategyId, setBulkStrategyId] = useState<string>("none");
+  const [showDuplicates, setShowDuplicates] = useState(false);
   const [form, setForm] = useState<NewTradeForm>(defaultForm);
 
   const startDateStr = startDate ? format(new Date(startDate), "MM/dd/yyyy") : undefined;
@@ -131,6 +133,9 @@ export default function TradeLog() {
 
   const { data: tags = [] } = trpc.tag.list.useQuery();
   const { data: strategies = [] } = trpc.strategy.list.useQuery();
+  const duplicatesQuery = trpc.trade.findDuplicates.useQuery(undefined, {
+    enabled: showDuplicates,
+  });
 
   const deleteMutation = trpc.trade.delete.useMutation({
     onSuccess: () => {
@@ -146,6 +151,7 @@ export default function TradeLog() {
       toast.success(`Deleted ${data.deleted} trades`);
       setSelected(new Set());
       refetch();
+      duplicatesQuery.refetch();
       setShowBulkDelete(false);
     },
     onError: (err) => toast.error(err.message),
@@ -268,10 +274,16 @@ export default function TradeLog() {
               {filtered.length} of {trades.length} trades
             </p>
           </div>
-          <Button onClick={() => setShowNewTrade(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            New Trade
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setShowDuplicates(true)}>
+              <Copy className="h-4 w-4 mr-2" />
+              Find Duplicates
+            </Button>
+            <Button onClick={() => setShowNewTrade(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              New Trade
+            </Button>
+          </div>
         </div>
 
         {/* Filter bar */}
@@ -544,6 +556,119 @@ export default function TradeLog() {
           </div>
         )}
       </div>
+
+      {/* Duplicates Dialog */}
+      <Dialog open={showDuplicates} onOpenChange={setShowDuplicates}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Duplicate Trades</DialogTitle>
+          </DialogHeader>
+
+          {duplicatesQuery.isLoading ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Scanning trades…
+            </p>
+          ) : !duplicatesQuery.data || duplicatesQuery.data.length === 0 ? (
+            <div className="py-8 text-center">
+              <p className="text-sm font-medium">No duplicate trades found</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Identical trades match on symbol, side, dates, prices and quantity.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Found {duplicatesQuery.data.length} duplicate group
+                {duplicatesQuery.data.length !== 1 ? "s" : ""}. The oldest trade
+                in each group is kept; click "Delete duplicates" to remove the rest.
+              </p>
+
+              <div className="space-y-3">
+                {duplicatesQuery.data.map((group, i) => {
+                  const [keep, ...dups] = group;
+                  return (
+                    <div
+                      key={i}
+                      className="rounded-lg border border-border bg-muted/20 p-3 space-y-2"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="font-mono font-semibold">{keep.symbol}</span>
+                          <Badge variant="outline" className="text-xs">
+                            {keep.side}
+                          </Badge>
+                          <span className="text-muted-foreground">
+                            {group.length} copies
+                          </span>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          disabled={deleteBulkMutation.isPending}
+                          onClick={() =>
+                            deleteBulkMutation.mutate({ ids: dups.map((d) => d.id) })
+                          }
+                        >
+                          <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                          Delete {dups.length} duplicate{dups.length !== 1 ? "s" : ""}
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-1 gap-1 text-xs">
+                        {group.map((t, idx) => (
+                          <div
+                            key={t.id}
+                            className={cn(
+                              "flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded px-2 py-1",
+                              idx === 0
+                                ? "bg-green-500/10 text-foreground"
+                                : "text-muted-foreground"
+                            )}
+                          >
+                            <span className="font-medium">
+                              {idx === 0 ? "Keep" : "Duplicate"}
+                            </span>
+                            <span>#{t.id}</span>
+                            <span>Entry: {formatDate(t.entryDate)}</span>
+                            <span>Exit: {formatDate(t.exitDate)}</span>
+                            <span>Qty: {t.quantity ?? "—"}</span>
+                            <span>
+                              {t.entryPrice ?? "—"} → {t.exitPrice ?? "—"}
+                            </span>
+                            <span className={pnlColor(t.netPnl)}>
+                              {t.netPnl != null ? formatCurrency(t.netPnl) : "—"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <Separator />
+              <div className="flex justify-end">
+                <Button
+                  variant="destructive"
+                  disabled={deleteBulkMutation.isPending}
+                  onClick={() => {
+                    const allDupIds = duplicatesQuery.data!
+                      .flatMap(([, ...rest]) => rest)
+                      .map((t) => t.id);
+                    if (allDupIds.length > 0) {
+                      deleteBulkMutation.mutate({ ids: allDupIds });
+                    }
+                  }}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete all duplicates (
+                  {duplicatesQuery.data.reduce((sum, g) => sum + g.length - 1, 0)})
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* New Trade Dialog */}
       <Dialog open={showNewTrade} onOpenChange={(o) => { setShowNewTrade(o); if (!o) setForm(defaultForm); }}>
