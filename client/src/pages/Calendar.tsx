@@ -111,17 +111,31 @@ export default function Calendar() {
   });
 
   // ---------------------------------------------------------------------------
+  // Filter trades to those that closed within the visible local-time month.
+  // The server filters by entryDate in MM/dd/yyyy and runs in UTC, so trades
+  // near midnight can leak in/out due to timezone mismatch. Clamping client-
+  // side keeps the calendar self-consistent regardless of server timezone.
+  // ---------------------------------------------------------------------------
+
+  const monthTrades = useMemo(() => {
+    const start = monthStart.getTime();
+    const end = monthEnd.getTime();
+    return trades.filter((t) => {
+      if (t.status !== "closed" || t.exitDate == null) return false;
+      return t.exitDate >= start && t.exitDate <= end;
+    });
+  }, [trades, monthStart, monthEnd]);
+
+  // ---------------------------------------------------------------------------
   // Build per-day stats map
   // ---------------------------------------------------------------------------
 
   const dayStatsMap = useMemo(() => {
     const map = new Map<string, DayStats>();
 
-    for (const trade of trades) {
-      if (trade.status !== "closed" || trade.netPnl == null) continue;
-      const exitTs = trade.exitDate;
-      if (!exitTs) continue;
-
+    for (const trade of monthTrades) {
+      if (trade.netPnl == null) continue;
+      const exitTs = trade.exitDate!;
       const exitDate = new Date(exitTs);
       const key = format(exitDate, "yyyy-MM-dd");
 
@@ -139,7 +153,7 @@ export default function Calendar() {
     }
 
     return map;
-  }, [trades]);
+  }, [monthTrades]);
 
   // ---------------------------------------------------------------------------
   // Build per-day trades map for click dialog
@@ -147,9 +161,8 @@ export default function Calendar() {
 
   const dayTradesMap = useMemo(() => {
     const map = new Map<string, DayTrade[]>();
-    for (const trade of trades) {
-      if (trade.status !== "closed" || !trade.exitDate) continue;
-      const key = format(new Date(trade.exitDate), "yyyy-MM-dd");
+    for (const trade of monthTrades) {
+      const key = format(new Date(trade.exitDate!), "yyyy-MM-dd");
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push({
         id: trade.id,
@@ -160,7 +173,7 @@ export default function Calendar() {
       });
     }
     return map;
-  }, [trades]);
+  }, [monthTrades]);
 
   // ---------------------------------------------------------------------------
   // Build 6x7 calendar grid
@@ -215,9 +228,7 @@ export default function Calendar() {
   // ---------------------------------------------------------------------------
 
   const monthlySummary = useMemo(() => {
-    const closedTrades = trades.filter(
-      (t) => t.status === "closed" && t.netPnl != null && t.exitDate
-    );
+    const closedTrades = monthTrades.filter((t) => t.netPnl != null);
 
     const totalPnl = closedTrades.reduce((s, t) => s + (t.netPnl ?? 0), 0);
     const totalCount = closedTrades.length;
@@ -241,7 +252,7 @@ export default function Calendar() {
       bestDay,
       worstDay,
     };
-  }, [trades, dayStatsMap]);
+  }, [monthTrades, dayStatsMap]);
 
   const today = new Date();
 
@@ -515,7 +526,12 @@ export default function Calendar() {
                 </p>
                 {monthlySummary.bestDay ? (
                   <>
-                    <p className="text-2xl font-bold text-green-400">
+                    <p
+                      className={cn(
+                        "text-2xl font-bold",
+                        pnlColor(monthlySummary.bestDay.pnl)
+                      )}
+                    >
                       {formatCurrency(monthlySummary.bestDay.pnl)}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
@@ -535,7 +551,12 @@ export default function Calendar() {
                 </p>
                 {monthlySummary.worstDay ? (
                   <>
-                    <p className="text-2xl font-bold text-red-400">
+                    <p
+                      className={cn(
+                        "text-2xl font-bold",
+                        pnlColor(monthlySummary.worstDay.pnl)
+                      )}
+                    >
                       {formatCurrency(monthlySummary.worstDay.pnl)}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">

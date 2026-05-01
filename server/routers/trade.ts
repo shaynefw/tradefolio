@@ -9,7 +9,7 @@ import { LIMITS } from "../../shared/types.js";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function parseDate(value: string | undefined | null): number | null {
+function parseDate(value: string | undefined | null, endOfDay = false): number | null {
   if (!value) return null;
 
   // Try mm/dd/yy or mm/dd/yyyy
@@ -17,7 +17,11 @@ function parseDate(value: string | undefined | null): number | null {
   if (mdyMatch) {
     let year = parseInt(mdyMatch[3], 10);
     if (year < 100) year += year >= 50 ? 1900 : 2000;
-    const d = new Date(year, parseInt(mdyMatch[1], 10) - 1, parseInt(mdyMatch[2], 10));
+    const month = parseInt(mdyMatch[1], 10) - 1;
+    const day = parseInt(mdyMatch[2], 10);
+    const d = endOfDay
+      ? new Date(year, month, day, 23, 59, 59, 999)
+      : new Date(year, month, day);
     return isNaN(d.getTime()) ? null : d.getTime();
   }
 
@@ -99,7 +103,8 @@ export const tradeRouter = router({
         if (ts !== null) conditions.push(gte(schema.trades.entryDate, ts));
       }
       if (input.endDate !== undefined) {
-        const ts = parseDate(input.endDate);
+        // Include the full last day, not just 00:00 of it.
+        const ts = parseDate(input.endDate, true);
         if (ts !== null) conditions.push(lte(schema.trades.entryDate, ts));
       }
 
