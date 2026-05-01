@@ -99,9 +99,19 @@ export default function Calendar() {
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
 
-  // Use global date range if set, otherwise use month bounds
-  const queryStart = startDate ? tsToStr(Math.max(startDate, monthStart.getTime())) : tsToStr(monthStart.getTime());
-  const queryEnd = endDate ? tsToStr(Math.min(endDate, monthEnd.getTime())) : tsToStr(monthEnd.getTime());
+  // The server filters by entryDate in its own (UTC on Vercel) timezone, so a
+  // trade that's local-dated within this month can have a UTC timestamp on
+  // the next or previous day. Widen the server query by ±2 days; the client
+  // does the precise local-time filtering below in `monthTrades`.
+  const DAY_MS = 86_400_000;
+  const queryStartTs = monthStart.getTime() - 2 * DAY_MS;
+  const queryEndTs = monthEnd.getTime() + 2 * DAY_MS;
+  const queryStart = startDate
+    ? tsToStr(Math.max(startDate, queryStartTs))
+    : tsToStr(queryStartTs);
+  const queryEnd = endDate
+    ? tsToStr(Math.min(endDate, queryEndTs))
+    : tsToStr(queryEndTs);
 
   const { data: trades = [], isLoading } = trpc.trade.list.useQuery({
     accountId: selectedAccountId ?? undefined,
