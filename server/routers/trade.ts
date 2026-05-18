@@ -519,9 +519,11 @@ export const tradeRouter = router({
       let skipped = 0;
 
       // Build a fingerprint set of existing trades for this user, so we can
-      // dedupe both against the database and within the incoming batch.
-      // Fingerprint matches on: symbol, side, entryDate, exitDate, entryPrice,
-      // exitPrice, quantity. This is what "identical trade" means in practice.
+      // dedupe both against the database and within the incoming batch. Two
+      // trades are duplicates ONLY if every meaningful field matches — symbol,
+      // side, both timestamps, both prices, quantity, pnl, fees, account and
+      // notes. Anything less aggressive risks merging two legitimately distinct
+      // trades that happen to share, say, the same setup on the same day.
       const fingerprint = (t: {
         symbol: string | null;
         side: string | null;
@@ -530,6 +532,10 @@ export const tradeRouter = router({
         entryPrice: number | null;
         exitPrice: number | null;
         quantity: number | null;
+        pnl: number | null;
+        fees: number | null;
+        accountId: number | null;
+        notes: string | null;
       }) =>
         [
           (t.symbol ?? "").toUpperCase(),
@@ -539,6 +545,10 @@ export const tradeRouter = router({
           t.entryPrice ?? "",
           t.exitPrice ?? "",
           t.quantity ?? "",
+          t.pnl ?? "",
+          t.fees ?? "",
+          t.accountId ?? "",
+          (t.notes ?? "").trim(),
         ].join("|");
 
       const seen = new Set<string>();
@@ -552,6 +562,10 @@ export const tradeRouter = router({
             entryPrice: schema.trades.entryPrice,
             exitPrice: schema.trades.exitPrice,
             quantity: schema.trades.quantity,
+            pnl: schema.trades.pnl,
+            fees: schema.trades.fees,
+            accountId: schema.trades.accountId,
+            notes: schema.trades.notes,
           })
           .from(schema.trades)
           .where(eq(schema.trades.userId, userId));
@@ -617,6 +631,10 @@ export const tradeRouter = router({
             entryPrice,
             exitPrice,
             quantity,
+            pnl,
+            fees,
+            accountId: input.accountId ?? null,
+            notes: row.notes ? String(row.notes).slice(0, 1000) : null,
           });
           if (seen.has(fp)) {
             skipped++;
@@ -651,9 +669,10 @@ export const tradeRouter = router({
       return { imported, skipped };
     }),
 
-  // Find groups of identical trades for the user (same symbol, side,
-  // entry/exit date, entry/exit price, quantity). Returns one entry per
-  // duplicate group with the matching trade IDs.
+  // Find groups of identical trades for the user. "Identical" means every
+  // meaningful field matches — symbol, side, both timestamps, both prices,
+  // quantity, pnl, fees, account, strategy and notes. Two trades on the same
+  // day with the same setup are NOT duplicates unless every field lines up.
   findDuplicates: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.user.id;
 
@@ -667,8 +686,12 @@ export const tradeRouter = router({
         entryPrice: schema.trades.entryPrice,
         exitPrice: schema.trades.exitPrice,
         quantity: schema.trades.quantity,
+        pnl: schema.trades.pnl,
+        fees: schema.trades.fees,
         netPnl: schema.trades.netPnl,
         accountId: schema.trades.accountId,
+        strategyId: schema.trades.strategyId,
+        notes: schema.trades.notes,
         createdAt: schema.trades.createdAt,
       })
       .from(schema.trades)
@@ -686,6 +709,11 @@ export const tradeRouter = router({
         r.entryPrice ?? "",
         r.exitPrice ?? "",
         r.quantity ?? "",
+        r.pnl ?? "",
+        r.fees ?? "",
+        r.accountId ?? "",
+        r.strategyId ?? "",
+        (r.notes ?? "").trim(),
       ].join("|");
       const arr = groups.get(key) ?? [];
       arr.push(r);
