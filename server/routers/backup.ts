@@ -212,6 +212,51 @@ export const backupRouter = router({
         }
       }
 
+      // Build a mapping from backup account ids to existing/new account ids
+      // for this user. Match by case-insensitive name so re-importing the same
+      // backup doesn't create duplicates. Skipped if an accountId override is
+      // provided — in that case every trade goes to the chosen account.
+      const backupAccountIdToLocalId = new Map<number, number>();
+      let accountsCreated = 0;
+      let accountsSkipped = 0;
+
+      if (input.accountId == null) {
+        const existingAccounts = await db
+          .select()
+          .from(schema.accounts)
+          .where(eq(schema.accounts.userId, userId));
+
+        const existingAccountsByName = new Map(
+          existingAccounts.map((a) => [a.name.trim().toLowerCase(), a])
+        );
+
+        for (const backupAcct of backup.accounts) {
+          const key = backupAcct.name.trim().toLowerCase();
+          const existing = existingAccountsByName.get(key);
+          if (existing) {
+            backupAccountIdToLocalId.set(backupAcct.id, existing.id);
+            accountsSkipped++;
+          } else {
+            const [created] = await db
+              .insert(schema.accounts)
+              .values({
+                userId,
+                name: backupAcct.name,
+                broker: backupAcct.broker ?? null,
+                accountNumber: backupAcct.accountNumber ?? null,
+                description: backupAcct.description ?? null,
+                color: backupAcct.color ?? "#6366f1",
+                // Never carry over isDefault — that's a user-local preference.
+                isDefault: false,
+              })
+              .returning();
+            backupAccountIdToLocalId.set(backupAcct.id, created.id);
+            existingAccountsByName.set(key, created);
+            accountsCreated++;
+          }
+        }
+      }
+
       // Insert trades
       let imported = 0;
       for (const backupTrade of backup.trades) {
@@ -220,15 +265,29 @@ export const backupRouter = router({
         const side = String(backupTrade.side).toLowerCase();
         if (side !== "long" && side !== "short") continue;
 
-        const accountIdToUse = input.accountId ?? backupTrade.accountId ?? null;
-
-        // Verify accountId still belongs to this user if set
+        // Resolution order:
+        //   1. Explicit override from the request (per-account restore)
+        //   2. Mapped local id from the backup's account (when we imported it)
+        //   3. The raw backup id only if it happens to belong to this user
+        //   4. null
         let resolvedAccountId: number | null = null;
-        if (accountIdToUse !== null) {
+        if (input.accountId != null) {
           const [acct] = await db
             .select({ id: schema.accounts.id })
             .from(schema.accounts)
-            .where(and(eq(schema.accounts.id, accountIdToUse), eq(schema.accounts.userId, userId)))
+            .where(and(eq(schema.accounts.id, input.accountId), eq(schema.accounts.userId, userId)))
+            .limit(1);
+          if (acct) resolvedAccountId = acct.id;
+        } else if (
+          backupTrade.accountId != null &&
+          backupAccountIdToLocalId.has(backupTrade.accountId)
+        ) {
+          resolvedAccountId = backupAccountIdToLocalId.get(backupTrade.accountId)!;
+        } else if (backupTrade.accountId != null) {
+          const [acct] = await db
+            .select({ id: schema.accounts.id })
+            .from(schema.accounts)
+            .where(and(eq(schema.accounts.id, backupTrade.accountId), eq(schema.accounts.userId, userId)))
             .limit(1);
           if (acct) resolvedAccountId = acct.id;
         }
@@ -277,6 +336,10 @@ export const backupRouter = router({
         imported++;
       }
 
-      return { imported };
+      return {
+        imported,
+        accountsCreated,
+        accountsSkipped,
+      };
     }),
 });

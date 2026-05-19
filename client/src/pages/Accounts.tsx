@@ -116,7 +116,14 @@ export default function Accounts() {
 
   const importMutation = trpc.backup.import.useMutation({
     onSuccess: (data) => {
-      toast.success(`Restored ${data.imported} trades`)
+      const parts = [`${data.imported} trade${data.imported !== 1 ? "s" : ""} restored`]
+      if (data.accountsCreated > 0) {
+        parts.push(`${data.accountsCreated} account${data.accountsCreated !== 1 ? "s" : ""} created`)
+      }
+      if (data.accountsSkipped > 0) {
+        parts.push(`${data.accountsSkipped} duplicate account${data.accountsSkipped !== 1 ? "s" : ""} skipped`)
+      }
+      toast.success(parts.join(", "))
       setImportingId(null)
       invalidate()
       utils.trade.list.invalidate()

@@ -571,7 +571,17 @@ function BackupImportTab() {
   const [accountId, setAccountId] = useState<string>("");
 
   const importMutation = trpc.backup.import.useMutation({
-    onSuccess: (data) => { toast.success(`Backup imported: ${data.imported} trades added.`); setJsonText(""); },
+    onSuccess: (data) => {
+      const parts = [`${data.imported} trade${data.imported !== 1 ? "s" : ""} added`];
+      if (data.accountsCreated > 0) {
+        parts.push(`${data.accountsCreated} account${data.accountsCreated !== 1 ? "s" : ""} created`);
+      }
+      if (data.accountsSkipped > 0) {
+        parts.push(`${data.accountsSkipped} duplicate account${data.accountsSkipped !== 1 ? "s" : ""} skipped`);
+      }
+      toast.success(`Backup imported: ${parts.join(", ")}.`);
+      setJsonText("");
+    },
     onError: (err) => { toast.error(err.message ?? "Import failed"); },
   });
 
