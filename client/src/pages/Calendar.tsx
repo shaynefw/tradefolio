@@ -74,12 +74,12 @@ function dayCellBg(stats: DayStats | undefined, isCurrentMonth: boolean): string
   if (!isCurrentMonth) return "bg-transparent opacity-0 pointer-events-none";
   if (!stats || stats.count === 0) return "bg-card/50 text-muted-foreground";
   const pnl = stats.pnl;
-  // Solid, saturated colors with an inset ring as the visible border so
-  // the cell pops without breaking the grid layout.
+  // Jewel-tone fills with a bright matching border via ring-inset so the
+  // cell looks crisp without disturbing the grid.
   if (pnl > 0)
-    return "bg-green-600/55 ring-1 ring-inset ring-green-400/70 shadow-[inset_0_0_0_1px_rgba(34,197,94,0.15)]";
+    return "bg-emerald-700/90 ring-1 ring-inset ring-emerald-400";
   if (pnl < 0)
-    return "bg-red-700/55 ring-1 ring-inset ring-red-400/70 shadow-[inset_0_0_0_1px_rgba(239,68,68,0.15)]";
+    return "bg-red-800/90 ring-1 ring-inset ring-red-400";
   return "bg-muted/30";
 }
 
@@ -495,8 +495,8 @@ export default function Calendar() {
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
             <span className="font-medium">Legend:</span>
             {[
-              { label: "Profit day", cls: "bg-green-600/55 border border-green-400/70" },
-              { label: "Loss day", cls: "bg-red-700/55 border border-red-400/70" },
+              { label: "Profit day", cls: "bg-emerald-700/90 border border-emerald-400" },
+              { label: "Loss day", cls: "bg-red-800/90 border border-red-400" },
               { label: "No trades", cls: "bg-card/50 border border-border" },
             ].map(({ label, cls }) => (
               <div key={label} className="flex items-center gap-1.5">
