@@ -2,7 +2,7 @@ import React, { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Upload, FileText, X, AlertTriangle, CheckCircle2,
-  ChevronRight, Info, Zap,
+  ChevronRight, Info, Zap, Loader2,
 } from "lucide-react";
 
 import DashboardLayout from "../components/DashboardLayout";
@@ -511,6 +511,23 @@ function PreviewTable({ trades }: { trades: ParsedTrade[] }) {
   );
 }
 
+// Indeterminate progress bar shown while an import mutation is pending.
+// CSV inserts can take several seconds for large batches and the user
+// previously saw no visible progress — just a button label change.
+function ImportProgress({ label }: { label: string }) {
+  return (
+    <div className="space-y-2">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        <div className="h-full w-1/3 animate-indeterminate rounded-full bg-primary" />
+      </div>
+      <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        {label}
+      </p>
+    </div>
+  );
+}
+
 function DropZone({ onFile, file, onClear }: { onFile: (f: File) => void; file: File | null; onClear: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -618,12 +635,18 @@ function BackupImportTab() {
         </Select>
       </div>
       <Separator />
-      <Button onClick={() => {
-        if (!jsonText.trim()) { toast.error("Paste or upload a JSON backup file."); return; }
-        importMutation.mutate({ data: jsonText, accountId: accountId && accountId !== "none" ? Number(accountId) : null });
-      }} disabled={importMutation.isPending || !jsonText.trim()}>
-        {importMutation.isPending ? "Importing…" : "Import Backup"}
-      </Button>
+      <div className="space-y-3">
+        <Button onClick={() => {
+          if (!jsonText.trim()) { toast.error("Paste or upload a JSON backup file."); return; }
+          importMutation.mutate({ data: jsonText, accountId: accountId && accountId !== "none" ? Number(accountId) : null });
+        }} disabled={importMutation.isPending || !jsonText.trim()}>
+          {importMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+          {importMutation.isPending ? "Importing backup…" : "Import Backup"}
+        </Button>
+        {importMutation.isPending && (
+          <ImportProgress label="Restoring backup… please don't close this tab." />
+        )}
+      </div>
     </div>
   );
 }
@@ -845,18 +868,30 @@ export default function ImportTrades() {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-3">
-                      <Button
-                        onClick={handleImport}
-                        disabled={importMutation.isPending || !accountId || parseResult.trades.length === 0 || noAccounts}
-                      >
-                        {importMutation.isPending
-                          ? "Importing…"
-                          : `Import ${parseResult.trades.length} Trade${parseResult.trades.length !== 1 ? "s" : ""}`}
-                      </Button>
-                      <span className="text-xs text-muted-foreground">
-                        {parseResult.trades.length} trades ready
-                      </span>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <Button
+                          onClick={handleImport}
+                          disabled={importMutation.isPending || !accountId || parseResult.trades.length === 0 || noAccounts}
+                        >
+                          {importMutation.isPending && (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          )}
+                          {importMutation.isPending
+                            ? `Importing ${parseResult.trades.length} trade${parseResult.trades.length !== 1 ? "s" : ""}…`
+                            : `Import ${parseResult.trades.length} Trade${parseResult.trades.length !== 1 ? "s" : ""}`}
+                        </Button>
+                        {!importMutation.isPending && (
+                          <span className="text-xs text-muted-foreground">
+                            {parseResult.trades.length} trades ready
+                          </span>
+                        )}
+                      </div>
+                      {importMutation.isPending && (
+                        <ImportProgress
+                          label={`Uploading and inserting ${parseResult.trades.length} trade${parseResult.trades.length !== 1 ? "s" : ""}… please don't close this tab.`}
+                        />
+                      )}
                     </div>
                   )}
                 </div>

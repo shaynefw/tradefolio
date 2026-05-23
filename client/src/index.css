@@ -25,6 +25,14 @@
   --color-profit: hsl(142 76% 36%);
   --color-loss: hsl(0 72% 51%);
   --radius: 0.5rem;
+
+  --animate-indeterminate: indeterminate 1.4s ease-in-out infinite;
+}
+
+@keyframes indeterminate {
+  0%   { transform: translateX(-100%); }
+  50%  { transform: translateX(150%); }
+  100% { transform: translateX(400%); }
 }
 
 * {

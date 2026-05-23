@@ -577,11 +577,30 @@ export default function TradeLog() {
             </div>
           ) : (
             <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Found {duplicatesQuery.data.length} duplicate group
-                {duplicatesQuery.data.length !== 1 ? "s" : ""}. The oldest trade
-                in each group is kept; click "Delete duplicates" to remove the rest.
-              </p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-muted-foreground">
+                  Found {duplicatesQuery.data.length} duplicate group
+                  {duplicatesQuery.data.length !== 1 ? "s" : ""}. The oldest trade
+                  in each group is kept.
+                </p>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={deleteBulkMutation.isPending}
+                  onClick={() => {
+                    const allDupIds = duplicatesQuery.data!
+                      .flatMap(([, ...rest]) => rest)
+                      .map((t) => t.id);
+                    if (allDupIds.length > 0) {
+                      deleteBulkMutation.mutate({ ids: allDupIds });
+                    }
+                  }}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete all duplicates (
+                  {duplicatesQuery.data.reduce((sum, g) => sum + g.length - 1, 0)})
+                </Button>
+              </div>
 
               <div className="space-y-3">
                 {duplicatesQuery.data.map((group, i) => {
@@ -646,25 +665,6 @@ export default function TradeLog() {
                 })}
               </div>
 
-              <Separator />
-              <div className="flex justify-end">
-                <Button
-                  variant="destructive"
-                  disabled={deleteBulkMutation.isPending}
-                  onClick={() => {
-                    const allDupIds = duplicatesQuery.data!
-                      .flatMap(([, ...rest]) => rest)
-                      .map((t) => t.id);
-                    if (allDupIds.length > 0) {
-                      deleteBulkMutation.mutate({ ids: allDupIds });
-                    }
-                  }}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete all duplicates (
-                  {duplicatesQuery.data.reduce((sum, g) => sum + g.length - 1, 0)})
-                </Button>
-              </div>
             </div>
           )}
         </DialogContent>
