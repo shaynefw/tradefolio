@@ -511,7 +511,7 @@ export default function HomePage() {
                     activeDot={{
                       r: 4,
                       fill: chartColor,
-                      stroke: "hsl(224 71% 4%)",
+                      stroke: "hsl(222 38% 13%)",
                       strokeWidth: 2,
                     }}
                   />

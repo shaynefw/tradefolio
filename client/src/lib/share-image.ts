@@ -30,7 +30,7 @@ export async function downloadNodeAsImage(
   const {
     filename = "tradefolio",
     pixelRatio = 2,
-    backgroundColor = "hsl(224 71% 4%)", // matches --color-background
+    backgroundColor = "hsl(222 38% 13%)", // matches --color-background
   } = opts;
 
   // First pass — primes browser caches (fonts, gradients, images).
@@ -60,7 +60,7 @@ export async function copyNodeAsImage(
 ): Promise<"copied" | "downloaded"> {
   const {
     pixelRatio = 2,
-    backgroundColor = "hsl(224 71% 4%)",
+    backgroundColor = "hsl(222 38% 13%)",
   } = opts;
 
   await toPng(node, { pixelRatio, backgroundColor, cacheBust: true });
