@@ -132,7 +132,15 @@ export const accountRouter = router({
     }),
 
   delete: protectedProcedure
-    .input(z.object({ id: z.number() }))
+    .input(
+      z.object({
+        id: z.number(),
+        // When true, all trades attached to this account are deleted too.
+        // When false/omitted, trades are kept and their accountId is nulled
+        // out by the existing ON DELETE SET NULL FK.
+        deleteTrades: z.boolean().optional(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user.id;
 
@@ -146,9 +154,24 @@ export const accountRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Account not found" });
       }
 
+      let tradesDeleted = 0;
+      if (input.deleteTrades) {
+        // Scope to the user too, just in case — defence against a stale accountId.
+        const deletedRows = await db
+          .delete(schema.trades)
+          .where(
+            and(
+              eq(schema.trades.accountId, input.id),
+              eq(schema.trades.userId, userId)
+            )
+          )
+          .returning({ id: schema.trades.id });
+        tradesDeleted = deletedRows.length;
+      }
+
       await db.delete(schema.accounts).where(eq(schema.accounts.id, input.id));
 
-      return { ok: true };
+      return { ok: true, tradesDeleted };
     }),
 
   setDefault: protectedProcedure

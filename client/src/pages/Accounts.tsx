@@ -69,6 +69,7 @@ export default function Accounts() {
   const [createOpen, setCreateOpen] = useState(false)
   const [editAccount, setEditAccount] = useState<Account | null>(null)
   const [deleteAccount, setDeleteAccount] = useState<Account | null>(null)
+  const [deleteTradesWithAccount, setDeleteTradesWithAccount] = useState(false)
   const [exportingId, setExportingId] = useState<number | null>(null)
   const [importingId, setImportingId] = useState<number | null>(null)
 
@@ -98,10 +99,18 @@ export default function Accounts() {
   })
 
   const deleteMutation = trpc.account.delete.useMutation({
-    onSuccess: () => {
-      toast.success("Account deleted")
+    onSuccess: (data) => {
+      if (data.tradesDeleted > 0) {
+        toast.success(
+          `Account deleted along with ${data.tradesDeleted} trade${data.tradesDeleted !== 1 ? "s" : ""}`
+        )
+      } else {
+        toast.success("Account deleted")
+      }
       setDeleteAccount(null)
+      setDeleteTradesWithAccount(false)
       invalidate()
+      utils.trade.list.invalidate()
     },
     onError: (err) => toast.error(err.message),
   })
@@ -278,7 +287,12 @@ export default function Accounts() {
       {/* Delete Dialog */}
       <AlertDialog
         open={!!deleteAccount}
-        onOpenChange={(open) => !open && setDeleteAccount(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteAccount(null)
+            setDeleteTradesWithAccount(false)
+          }
+        }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -286,18 +300,54 @@ export default function Accounts() {
             <AlertDialogDescription>
               Are you sure you want to delete{" "}
               <span className="font-semibold">{deleteAccount?.name}</span>?
-              Your trades will not be deleted, just unlinked from this account.
+              {deleteAccount?.tradeCount ? (
+                <>
+                  {" "}This account has{" "}
+                  <span className="font-semibold">
+                    {deleteAccount.tradeCount} trade
+                    {deleteAccount.tradeCount !== 1 ? "s" : ""}
+                  </span>
+                  .
+                </>
+              ) : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
+
+          <div className="flex items-start gap-3 rounded-md border border-border bg-muted/30 px-3 py-2.5">
+            <Checkbox
+              id="delete-trades-with-account"
+              checked={deleteTradesWithAccount}
+              onCheckedChange={(v) => setDeleteTradesWithAccount(Boolean(v))}
+              className="mt-0.5"
+            />
+            <div className="space-y-0.5">
+              <Label
+                htmlFor="delete-trades-with-account"
+                className="cursor-pointer font-medium"
+              >
+                Also delete all trades on this account
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {deleteTradesWithAccount
+                  ? "Trades will be permanently removed. This cannot be undone."
+                  : "Trades will be kept and unlinked from this account."}
+              </p>
+            </div>
+          </div>
+
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() =>
-                deleteAccount && deleteMutation.mutate({ id: deleteAccount.id })
+                deleteAccount &&
+                deleteMutation.mutate({
+                  id: deleteAccount.id,
+                  deleteTrades: deleteTradesWithAccount,
+                })
               }
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete
+              {deleteTradesWithAccount ? "Delete account & trades" : "Delete account"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
