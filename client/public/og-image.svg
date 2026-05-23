@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <!-- Background -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a0e1a"/>
+      <stop offset="100%" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="chartGreen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#22c55e" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#22c55e" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Decorative grid lines -->
+  <g stroke="#1f2937" stroke-width="1" opacity="0.6">
+    <line x1="0" y1="160" x2="1200" y2="160"/>
+    <line x1="0" y1="320" x2="1200" y2="320"/>
+    <line x1="0" y1="480" x2="1200" y2="480"/>
+  </g>
+
+  <!-- Trending chart silhouette across the bottom -->
+  <path d="M 0 510 L 80 470 L 160 490 L 240 420 L 320 440 L 400 360 L 480 380 L 560 300 L 640 320 L 720 240 L 800 260 L 880 180 L 960 200 L 1040 140 L 1120 160 L 1200 100 L 1200 630 L 0 630 Z"
+        fill="url(#chartGreen)"/>
+  <path d="M 0 510 L 80 470 L 160 490 L 240 420 L 320 440 L 400 360 L 480 380 L 560 300 L 640 320 L 720 240 L 800 260 L 880 180 L 960 200 L 1040 140 L 1120 160 L 1200 100"
+        fill="none" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
+
+  <!-- Logo mark -->
+  <g transform="translate(80, 140)">
+    <rect width="84" height="84" rx="20" fill="#6366f1"/>
+    <path d="M 22 60 L 38 38 L 50 50 L 68 26" stroke="white" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M 58 26 L 68 26 L 68 36" stroke="white" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="190" y="200" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="84" font-weight="800" fill="#f8fafc" letter-spacing="-2">
+    Tradefolio
+  </text>
+
+  <!-- Tagline -->
+  <text x="80" y="290" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="36" font-weight="500" fill="#94a3b8" letter-spacing="-0.5">
+    Your trading journal &amp; performance analytics
+  </text>
+
+  <!-- Stat chips -->
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <!-- Win rate chip -->
+    <rect x="80" y="360" width="220" height="70" rx="14" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <text x="100" y="388" font-size="14" font-weight="600" fill="#94a3b8" letter-spacing="1">WIN RATE</text>
+    <text x="100" y="418" font-size="28" font-weight="700" fill="#22c55e">68.4%</text>
+
+    <!-- P&L chip -->
+    <rect x="320" y="360" width="240" height="70" rx="14" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <text x="340" y="388" font-size="14" font-weight="600" fill="#94a3b8" letter-spacing="1">TOTAL P&amp;L</text>
+    <text x="340" y="418" font-size="28" font-weight="700" fill="#22c55e">+$24,860</text>
+
+    <!-- Trades chip -->
+    <rect x="580" y="360" width="200" height="70" rx="14" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <text x="600" y="388" font-size="14" font-weight="600" fill="#94a3b8" letter-spacing="1">TRADES</text>
+    <text x="600" y="418" font-size="28" font-weight="700" fill="#f8fafc">1,247</text>
+  </g>
+</svg>
