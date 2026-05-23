@@ -412,8 +412,30 @@ export default function TradeLog() {
 
         {/* Bulk action bar */}
         {selected.size > 0 && (
-          <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+          <div className="flex flex-wrap items-center gap-3 p-3 bg-muted rounded-lg">
             <span className="text-sm font-medium">{selected.size} selected</span>
+
+            {/* Cross-page "select all filtered" affordance — only when the
+                current page is fully selected but more filtered trades exist
+                on other pages. */}
+            {allPageSelected && selected.size < filtered.length && (
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto p-0 text-primary"
+                onClick={() =>
+                  setSelected(new Set(filtered.map((t) => t.id)))
+                }
+              >
+                Select all {filtered.length} filtered trades
+              </Button>
+            )}
+            {selected.size === filtered.length && filtered.length > paginated.length && (
+              <span className="text-xs text-muted-foreground">
+                (all {filtered.length} filtered trades selected)
+              </span>
+            )}
+
             {tags.length > 0 && (
               <Button
                 variant="outline"
@@ -447,7 +469,7 @@ export default function TradeLog() {
               onClick={() => setShowBulkDelete(true)}
             >
               <Trash2 className="h-4 w-4 mr-1" />
-              Delete
+              Delete {selected.size} trade{selected.size !== 1 ? "s" : ""}
             </Button>
             <Button
               variant="ghost"
