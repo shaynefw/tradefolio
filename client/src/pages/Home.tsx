@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import {
   AreaChart,
@@ -32,6 +32,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Separator } from "../components/ui/separator";
+import { ShareImageButton } from "../components/ShareImageButton";
 
 // ---------------------------------------------------------------------------
 // Types inferred from API
@@ -266,6 +267,8 @@ export default function HomePage() {
   const finalPnl = chartData.length > 0 ? chartData[chartData.length - 1].cumPnl : 0;
   const chartColor = finalPnl >= 0 ? "#4ade80" : "#f87171"; // green-400 / red-400
 
+  const shareableRef = useRef<HTMLDivElement>(null);
+
   return (
     <DashboardLayout>
       <div className="flex flex-col gap-6 p-6">
@@ -279,15 +282,21 @@ export default function HomePage() {
               Your trading performance at a glance
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 gap-1.5"
-            onClick={() => navigate("/import")}
-          >
-            <Upload className="h-3.5 w-3.5" />
-            Import
-          </Button>
+          <div className="flex items-center gap-2">
+            <ShareImageButton
+              target={shareableRef}
+              filename="tradefolio-dashboard"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5"
+              onClick={() => navigate("/import")}
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Import
+            </Button>
+          </div>
         </div>
 
         <Separator className="bg-border" />
@@ -317,6 +326,8 @@ export default function HomePage() {
           </Card>
         )}
 
+        {/* Shareable region: stats + chart */}
+        <div ref={shareableRef} className="flex flex-col gap-6 bg-background">
         {/* Stats grid */}
         {isLoading ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -509,6 +520,8 @@ export default function HomePage() {
             )}
           </CardContent>
         </Card>
+        </div>
+        {/* /Shareable region */}
 
         {/* Recent Trades */}
         <Card className="bg-card border-border">

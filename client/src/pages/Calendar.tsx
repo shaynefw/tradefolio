@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "../lib/trpc";
 import { useAccount } from "../contexts/AccountContext";
@@ -16,6 +16,7 @@ import {
 } from "../components/ui/select";
 import { Button } from "../components/ui/button";
 import { Separator } from "../components/ui/separator";
+import { ShareImageButton } from "../components/ShareImageButton";
 import {
   Dialog,
   DialogContent,
@@ -95,6 +96,7 @@ export default function Calendar() {
   const { selectedStrategyId } = useStrategy();
   const { startDate, endDate } = useDateRange();
   const [selectedDay, setSelectedDay] = useState<{ date: Date; trades: DayTrade[] } | null>(null);
+  const shareableRef = useRef<HTMLDivElement>(null);
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
@@ -317,6 +319,11 @@ export default function Calendar() {
               Today
             </Button>
 
+            <ShareImageButton
+              target={shareableRef}
+              filename={`tradefolio-calendar-${format(currentMonth, "yyyy-MM")}`}
+            />
+
             <Select
               value={selectedAccountId != null ? String(selectedAccountId) : "all"}
               onValueChange={(v) =>
@@ -345,6 +352,8 @@ export default function Calendar() {
           </div>
         )}
 
+        {/* Shareable region: calendar grid + summary */}
+        <div ref={shareableRef} className="flex flex-col gap-6 bg-background">
         {/* Calendar grid */}
         {!isLoading && (
           <Card className="bg-card/60 overflow-hidden">
@@ -580,6 +589,8 @@ export default function Calendar() {
             </Card>
           </div>
         )}
+        </div>
+        {/* /Shareable region */}
       </div>
 
       {/* Day detail dialog */}

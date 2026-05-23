@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { trpc } from "../lib/trpc";
 import { useAccount } from "../contexts/AccountContext";
 import { useDateRange } from "../contexts/DateRangeContext";
@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "../components/ui/select";
 import { Separator } from "../components/ui/separator";
+import { ShareImageButton } from "../components/ShareImageButton";
 import {
   AreaChart,
   Area,
@@ -108,6 +109,7 @@ export default function Analytics() {
   const { selectedAccountId, accounts, setSelectedAccountId } = useAccount();
   const { selectedStrategyId } = useStrategy();
   const { startDate, endDate } = useDateRange();
+  const shareableRef = useRef<HTMLDivElement>(null);
 
   const startDateStr = startDate ? tsToDateStr(startDate) : undefined;
   const endDateStr = endDate ? tsToDateStr(endDate) : undefined;
@@ -446,6 +448,10 @@ export default function Analytics() {
 
           {/* Filters row */}
           <div className="flex flex-wrap items-center gap-3">
+            <ShareImageButton
+              target={shareableRef}
+              filename="tradefolio-analytics"
+            />
             <Select
               value={selectedAccountId != null ? String(selectedAccountId) : "all"}
               onValueChange={(v) =>
@@ -487,6 +493,8 @@ export default function Analytics() {
           </div>
         )}
 
+        {/* Shareable region: stats + all charts */}
+        <div ref={shareableRef} className="space-y-8 bg-background">
         {/* Content */}
         {!isLoading && !isEmpty && (
           <>
@@ -1091,6 +1099,8 @@ export default function Analytics() {
             </div>
           </>
         )}
+        </div>
+        {/* /Shareable region */}
       </div>
     </DashboardLayout>
   );
