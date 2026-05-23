@@ -740,7 +740,7 @@ export default function ImportTrades() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-4xl mx-auto w-full">
+      <div className="p-4 sm:p-6 max-w-4xl mx-auto w-full">
         <div className="mb-6">
           <h1 className="text-2xl font-bold tracking-tight">Import Trades</h1>
           <p className="text-muted-foreground mt-1">

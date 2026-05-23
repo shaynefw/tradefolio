@@ -274,7 +274,7 @@ export default function Calendar() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-6">
+      <div className="p-4 sm:p-6 space-y-6">
         {/* Page header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -285,7 +285,7 @@ export default function Calendar() {
           </div>
 
           {/* Controls */}
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="flex items-center gap-1">
               <Button
                 variant="outline"
@@ -359,7 +359,7 @@ export default function Calendar() {
           <Card className="bg-card/60 overflow-hidden">
             <CardContent className="p-0">
               {/* Day of week header + Week column */}
-              <div className="grid grid-cols-[repeat(7,1fr)_minmax(90px,0.8fr)] border-b border-border">
+              <div className="grid grid-cols-[repeat(7,1fr)_minmax(60px,0.7fr)] sm:grid-cols-[repeat(7,1fr)_minmax(90px,0.8fr)] border-b border-border">
                 {DOW_LABELS.map((d) => (
                   <div
                     key={d}
@@ -375,7 +375,7 @@ export default function Calendar() {
 
               {/* Days grid with weekly totals */}
               {Array.from({ length: 6 }, (_, row) => (
-                <div key={row} className="grid grid-cols-[repeat(7,1fr)_minmax(90px,0.8fr)]">
+                <div key={row} className="grid grid-cols-[repeat(7,1fr)_minmax(60px,0.7fr)] sm:grid-cols-[repeat(7,1fr)_minmax(90px,0.8fr)]">
                   {calendarGrid.slice(row * 7, row * 7 + 7).map((cell, colIdx) => {
                     const idx = row * 7 + colIdx;
                     const isToday =
@@ -395,7 +395,7 @@ export default function Calendar() {
                           }
                         }}
                         className={cn(
-                          "min-h-[90px] border-b border-r border-border/50 p-2 transition-colors",
+                          "min-h-[60px] sm:min-h-[90px] border-b border-r border-border/50 p-1.5 sm:p-2 transition-colors",
                           cell.inMonth
                             ? cn(
                                 dayCellBg(stats, true),
@@ -447,21 +447,21 @@ export default function Calendar() {
                   })}
 
                   {/* Weekly total cell */}
-                  <div className="min-h-[90px] border-b border-border/50 border-l border-border p-2 flex flex-col items-center justify-center gap-0.5 bg-card/30">
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                      Week {row + 1}
+                  <div className="min-h-[60px] sm:min-h-[90px] border-b border-border/50 border-l border-border p-1.5 sm:p-2 flex flex-col items-center justify-center gap-0.5 bg-card/30">
+                    <span className="text-[9px] sm:text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Wk {row + 1}
                     </span>
                     <span
                       className={cn(
-                        "text-base font-bold",
+                        "text-xs sm:text-base font-bold",
                         weeklyTotals[row].count > 0
                           ? pnlColor(weeklyTotals[row].pnl)
                           : "text-muted-foreground"
                       )}
                     >
-                      {formatCurrency(weeklyTotals[row].pnl)}
+                      {formatCurrency(weeklyTotals[row].pnl, 0)}
                     </span>
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="text-[9px] sm:text-[10px] text-muted-foreground hidden sm:block">
                       {weeklyTotals[row].count} trade{weeklyTotals[row].count !== 1 ? "s" : ""}
                     </span>
                   </div>

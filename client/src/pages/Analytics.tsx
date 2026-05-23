@@ -436,9 +436,9 @@ export default function Analytics() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-8">
+      <div className="p-4 sm:p-6 space-y-8">
         {/* Page header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <div>
             <h1 className="text-2xl font-bold">Analytics</h1>
             <p className="text-sm text-muted-foreground">
@@ -447,7 +447,7 @@ export default function Analytics() {
           </div>
 
           {/* Filters row */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <ShareImageButton
               target={shareableRef}
               filename="tradefolio-analytics"

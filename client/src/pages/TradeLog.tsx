@@ -274,16 +274,16 @@ export default function TradeLog() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-4">
+      <div className="p-4 sm:p-6 space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold">Trade Log</h1>
             <p className="text-sm text-muted-foreground">
               {filtered.length} of {trades.length} trades
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               onClick={() => setShowDuplicates(true)}

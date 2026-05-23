@@ -217,16 +217,16 @@ export default function Accounts() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 px-6 py-6">
+      <div className="space-y-6 px-4 py-4 sm:px-6 sm:py-6">
         {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold">Accounts</h1>
             <p className="text-sm text-muted-foreground mt-1">
               Manage your trading accounts and broker profiles
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               onClick={handleExportAll}

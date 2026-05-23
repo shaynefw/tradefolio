@@ -14,6 +14,8 @@ import {
   ChevronDown,
   Calendar,
   AlertTriangle,
+  Menu,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -354,7 +356,13 @@ function DateRangeSelector() {
 // Sidebar
 // ---------------------------------------------------------------------------
 
-function Sidebar() {
+function Sidebar({
+  mobileOpen,
+  onMobileClose,
+}: {
+  mobileOpen: boolean;
+  onMobileClose: () => void;
+}) {
   const [location, navigate] = useLocation();
   const { user, refetch } = useAuth();
 
@@ -385,15 +393,42 @@ function Sidebar() {
   }
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 flex w-60 flex-col border-r border-border bg-card">
-      {/* Logo */}
+    <>
+      {/* Mobile backdrop — clicking outside the drawer closes it */}
+      <div
+        className={cn(
+          "fixed inset-0 z-40 bg-black/60 transition-opacity md:hidden",
+          mobileOpen
+            ? "opacity-100 pointer-events-auto"
+            : "opacity-0 pointer-events-none"
+        )}
+        onClick={onMobileClose}
+        aria-hidden="true"
+      />
+
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-border bg-card transition-transform duration-200 md:w-60 md:translate-x-0 md:z-30",
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+      {/* Logo + mobile close button */}
       <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-4">
         <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary">
           <TrendingUp className="h-4 w-4 text-primary-foreground" />
         </div>
-        <span className="text-base font-semibold tracking-tight text-foreground">
+        <span className="flex-1 text-base font-semibold tracking-tight text-foreground">
           Tradefolio
         </span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 md:hidden"
+          onClick={onMobileClose}
+          aria-label="Close menu"
+        >
+          <X className="h-4 w-4" />
+        </Button>
       </div>
 
       {/* Scrollable content */}
@@ -419,6 +454,7 @@ function Sidebar() {
                 key={href}
                 href={href}
                 title={dupTitle}
+                onClick={onMobileClose}
                 className={cn(
                   "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
                   isActive(href)
@@ -466,6 +502,7 @@ function Sidebar() {
         </Button>
       </div>
     </aside>
+    </>
   );
 }
 
@@ -478,14 +515,42 @@ export interface DashboardLayoutProps {
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
+  const [mobileOpen, setMobileOpen] = React.useState(false);
+
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar />
+      <Sidebar
+        mobileOpen={mobileOpen}
+        onMobileClose={() => setMobileOpen(false)}
+      />
 
-      {/* Main content — offset by sidebar width */}
-      <main className="ml-60 flex flex-1 flex-col overflow-y-auto">
-        {children}
-      </main>
+      {/* Main content — offset by sidebar width on md+; full width on mobile */}
+      <div className="flex min-h-screen flex-1 flex-col md:ml-60">
+        {/* Mobile top bar */}
+        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-card/95 px-4 backdrop-blur md:hidden">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9"
+            onClick={() => setMobileOpen(true)}
+            aria-label="Open menu"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          <div className="flex items-center gap-2">
+            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary">
+              <TrendingUp className="h-3.5 w-3.5 text-primary-foreground" />
+            </div>
+            <span className="text-sm font-semibold tracking-tight text-foreground">
+              Tradefolio
+            </span>
+          </div>
+        </header>
+
+        <main className="flex flex-1 flex-col overflow-y-auto">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
