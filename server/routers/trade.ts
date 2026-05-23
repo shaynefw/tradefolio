@@ -718,4 +718,55 @@ export const tradeRouter = router({
 
     return duplicateGroups;
   }),
+
+  // Lightweight count of duplicate groups + extra (deletable) trades.
+  // Used by the sidebar warning icon and the Trade Log banner so we don't
+  // have to ship every trade just to know whether duplicates exist.
+  duplicateCount: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.user.id;
+
+    const rows = await db
+      .select({
+        symbol: schema.trades.symbol,
+        side: schema.trades.side,
+        entryDate: schema.trades.entryDate,
+        exitDate: schema.trades.exitDate,
+        entryPrice: schema.trades.entryPrice,
+        exitPrice: schema.trades.exitPrice,
+        quantity: schema.trades.quantity,
+        pnl: schema.trades.pnl,
+        fees: schema.trades.fees,
+        accountId: schema.trades.accountId,
+      })
+      .from(schema.trades)
+      .where(eq(schema.trades.userId, userId));
+
+    const counts = new Map<string, number>();
+    for (const r of rows) {
+      const key = [
+        (r.symbol ?? "").toUpperCase(),
+        (r.side ?? "").toLowerCase(),
+        r.entryDate ?? "",
+        r.exitDate ?? "",
+        r.entryPrice ?? "",
+        r.exitPrice ?? "",
+        r.quantity ?? "",
+        r.pnl ?? "",
+        r.fees ?? "",
+        r.accountId ?? "",
+      ].join("|");
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+
+    let groupCount = 0;
+    let extraTrades = 0;
+    for (const n of counts.values()) {
+      if (n > 1) {
+        groupCount++;
+        extraTrades += n - 1;
+      }
+    }
+
+    return { groups: groupCount, extras: extraTrades };
+  }),
 });

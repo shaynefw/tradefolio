@@ -55,6 +55,7 @@ import {
   Tags,
   Target,
   Copy,
+  AlertTriangle,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -136,11 +137,18 @@ export default function TradeLog() {
   const duplicatesQuery = trpc.trade.findDuplicates.useQuery(undefined, {
     enabled: showDuplicates,
   });
+  const dupCountQuery = trpc.trade.duplicateCount.useQuery(undefined, {
+    refetchOnWindowFocus: true,
+    staleTime: 30_000,
+  });
+  const dupGroups = dupCountQuery.data?.groups ?? 0;
+  const dupExtras = dupCountQuery.data?.extras ?? 0;
 
   const deleteMutation = trpc.trade.delete.useMutation({
     onSuccess: () => {
       toast.success("Trade deleted");
       refetch();
+      dupCountQuery.refetch();
       setDeletingId(null);
     },
     onError: (err) => toast.error(err.message),
@@ -152,6 +160,7 @@ export default function TradeLog() {
       setSelected(new Set());
       refetch();
       duplicatesQuery.refetch();
+      dupCountQuery.refetch();
       setShowBulkDelete(false);
     },
     onError: (err) => toast.error(err.message),
@@ -275,9 +284,21 @@ export default function TradeLog() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setShowDuplicates(true)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowDuplicates(true)}
+              className={cn(
+                dupGroups > 0 &&
+                  "border-amber-500/40 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300"
+              )}
+            >
               <Copy className="h-4 w-4 mr-2" />
               Find Duplicates
+              {dupGroups > 0 && (
+                <span className="ml-2 rounded-full bg-amber-500/25 px-1.5 py-0.5 text-[10px] font-semibold leading-none">
+                  {dupExtras}
+                </span>
+              )}
             </Button>
             <Button onClick={() => setShowNewTrade(true)}>
               <Plus className="h-4 w-4 mr-2" />
@@ -285,6 +306,32 @@ export default function TradeLog() {
             </Button>
           </div>
         </div>
+
+        {/* Duplicate trades banner */}
+        {dupGroups > 0 && (
+          <div className="flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2.5 text-sm text-amber-200">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-400" />
+              <div>
+                <p className="font-medium text-amber-300">
+                  {dupExtras} duplicate trade{dupExtras !== 1 ? "s" : ""} detected
+                </p>
+                <p className="text-xs text-amber-200/70">
+                  Found {dupGroups} group{dupGroups !== 1 ? "s" : ""} of identical trades. Review and clean them up to keep your stats accurate.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 border-amber-500/40 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 hover:text-amber-200"
+              onClick={() => setShowDuplicates(true)}
+            >
+              <Copy className="h-3.5 w-3.5 mr-1.5" />
+              Review duplicates
+            </Button>
+          </div>
+        )}
 
         {/* Filter bar */}
         <div className="flex flex-wrap gap-3 items-end">

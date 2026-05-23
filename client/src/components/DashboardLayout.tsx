@@ -13,6 +13,7 @@ import {
   LogOut,
   ChevronDown,
   Calendar,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -357,6 +358,17 @@ function Sidebar() {
   const [location, navigate] = useLocation();
   const { user, refetch } = useAuth();
 
+  // Lightweight duplicate-trade count so the nav can flag a warning next to
+  // Trade Log when duplicates exist. Refresh once a minute in the background
+  // so deletions elsewhere clear the indicator without a hard reload.
+  const { data: dupCount } = trpc.trade.duplicateCount.useQuery(undefined, {
+    refetchOnWindowFocus: true,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+  const dupGroups = dupCount?.groups ?? 0;
+  const dupExtras = dupCount?.extras ?? 0;
+
   const logoutMutation = trpc.auth.logout.useMutation({
     onSuccess: () => {
       refetch();
@@ -397,21 +409,37 @@ function Sidebar() {
 
         {/* Nav */}
         <nav className="flex flex-1 flex-col gap-0.5">
-          {NAV_ITEMS.map(({ label, icon: Icon, href }) => (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-                isActive(href)
-                  ? "bg-accent text-accent-foreground font-medium"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-              )}
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              {label}
-            </Link>
-          ))}
+          {NAV_ITEMS.map(({ label, icon: Icon, href }) => {
+            const showDupBadge = href === "/trades" && dupGroups > 0;
+            const dupTitle = showDupBadge
+              ? `${dupExtras} duplicate trade${dupExtras !== 1 ? "s" : ""} across ${dupGroups} group${dupGroups !== 1 ? "s" : ""} — open Trade Log to review`
+              : undefined;
+            return (
+              <Link
+                key={href}
+                href={href}
+                title={dupTitle}
+                className={cn(
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                  isActive(href)
+                    ? "bg-accent text-accent-foreground font-medium"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                )}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="flex-1">{label}</span>
+                {showDupBadge && (
+                  <span
+                    className="flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400"
+                    aria-label={dupTitle}
+                  >
+                    <AlertTriangle className="h-3 w-3" />
+                    {dupExtras}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
         </nav>
       </div>
 
