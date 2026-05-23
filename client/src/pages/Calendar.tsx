@@ -74,13 +74,9 @@ function dayCellBg(stats: DayStats | undefined, isCurrentMonth: boolean): string
   if (!isCurrentMonth) return "bg-transparent opacity-0 pointer-events-none";
   if (!stats || stats.count === 0) return "bg-card/50 text-muted-foreground";
   const pnl = stats.pnl;
-  if (pnl === 0) return "bg-muted/30";
-  if (pnl > 500) return "bg-green-500/40";
-  if (pnl > 100) return "bg-green-500/25";
-  if (pnl > 0) return "bg-green-500/15";
-  if (pnl < -500) return "bg-red-500/40";
-  if (pnl < -100) return "bg-red-500/25";
-  return "bg-red-500/15";
+  if (pnl > 0) return "bg-green-600/30 border-green-500/40";
+  if (pnl < 0) return "bg-red-600/30 border-red-500/40";
+  return "bg-muted/30";
 }
 
 const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -407,36 +403,37 @@ export default function Calendar() {
                         )}
                       >
                         {cell.inMonth && (
-                          <div className="flex flex-col h-full gap-1">
-                            <div className="flex items-start justify-between">
-                              <span
-                                className={cn(
-                                  "text-xs font-medium leading-none",
-                                  isToday
-                                    ? "flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-[11px]"
-                                    : hasTrades
-                                    ? "text-foreground/80"
-                                    : "text-muted-foreground/50"
-                                )}
-                              >
-                                {cell.dayNum}
-                              </span>
-                              {hasTrades && (
-                                <span className="text-[10px] font-medium text-muted-foreground bg-black/20 rounded px-1 leading-4">
-                                  {stats.count}
-                                </span>
+                          <div className="relative flex h-full flex-col">
+                            {/* Day number, pinned to top-right */}
+                            <span
+                              className={cn(
+                                "absolute top-0 right-0 text-xs font-medium leading-none",
+                                isToday
+                                  ? "flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-[11px]"
+                                  : hasTrades
+                                  ? "text-foreground/80"
+                                  : "text-muted-foreground/50"
                               )}
-                            </div>
+                            >
+                              {cell.dayNum}
+                            </span>
+
+                            {/* P&L + trade count, centered */}
                             {hasTrades && (
-                              <div className="flex-1 flex items-end">
+                              <div className="flex flex-1 flex-col items-center justify-center gap-0.5 pt-3">
                                 <span
                                   className={cn(
-                                    "text-xs font-semibold leading-none",
-                                    pnlColor(stats.pnl)
+                                    "text-sm sm:text-lg font-bold leading-tight tabular-nums",
+                                    stats.pnl >= 0 ? "text-green-400" : "text-red-400"
                                   )}
                                 >
-                                  {stats.pnl >= 0 ? "+" : ""}
-                                  {formatCurrency(stats.pnl, 0)}
+                                  {stats.pnl >= 0 ? "" : "-"}$
+                                  {Math.abs(stats.pnl) >= 1000
+                                    ? `${(Math.abs(stats.pnl) / 1000).toFixed(1)}k`
+                                    : Math.abs(stats.pnl).toFixed(0)}
+                                </span>
+                                <span className="text-[10px] sm:text-xs text-muted-foreground">
+                                  {stats.count} trade{stats.count !== 1 ? "s" : ""}
                                 </span>
                               </div>
                             )}
@@ -487,15 +484,11 @@ export default function Calendar() {
         {/* Legend */}
         {!isLoading && (
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-            <span className="font-medium">P&L Legend:</span>
+            <span className="font-medium">Legend:</span>
             {[
-              { label: "> +$500", cls: "bg-green-500/40" },
-              { label: "+$100 – +$500", cls: "bg-green-500/25" },
-              { label: "+$1 – +$100", cls: "bg-green-500/15" },
-              { label: "$0", cls: "bg-muted/30" },
-              { label: "-$1 – -$100", cls: "bg-red-500/15" },
-              { label: "-$100 – -$500", cls: "bg-red-500/25" },
-              { label: "< -$500", cls: "bg-red-500/40" },
+              { label: "Profit day", cls: "bg-green-600/30 border border-green-500/40" },
+              { label: "Loss day", cls: "bg-red-600/30 border border-red-500/40" },
+              { label: "No trades", cls: "bg-card/50 border border-border" },
             ].map(({ label, cls }) => (
               <div key={label} className="flex items-center gap-1.5">
                 <span className={cn("w-3 h-3 rounded-sm inline-block", cls)} />
