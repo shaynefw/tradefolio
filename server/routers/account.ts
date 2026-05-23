@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { eq, and, asc, desc, sql } from "drizzle-orm";
+import { eq, and, asc, desc, sql, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc.js";
 import { db, schema } from "../db.js";
@@ -172,6 +172,60 @@ export const accountRouter = router({
       await db.delete(schema.accounts).where(eq(schema.accounts.id, input.id));
 
       return { ok: true, tradesDeleted };
+    }),
+
+  // Delete multiple accounts at once, optionally wiping their trades too.
+  // Scoped to the calling user, so a stale or hostile id can't reach another
+  // user's accounts.
+  deleteBulk: protectedProcedure
+    .input(
+      z.object({
+        ids: z.array(z.number()).min(1),
+        deleteTrades: z.boolean().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+
+      // Restrict to accounts the user actually owns.
+      const owned = await db
+        .select({ id: schema.accounts.id })
+        .from(schema.accounts)
+        .where(
+          and(
+            inArray(schema.accounts.id, input.ids),
+            eq(schema.accounts.userId, userId)
+          )
+        );
+      const ownedIds = owned.map((a) => a.id);
+      if (ownedIds.length === 0) {
+        return { accountsDeleted: 0, tradesDeleted: 0 };
+      }
+
+      let tradesDeleted = 0;
+      if (input.deleteTrades) {
+        const deletedRows = await db
+          .delete(schema.trades)
+          .where(
+            and(
+              inArray(schema.trades.accountId, ownedIds),
+              eq(schema.trades.userId, userId)
+            )
+          )
+          .returning({ id: schema.trades.id });
+        tradesDeleted = deletedRows.length;
+      }
+
+      await db
+        .delete(schema.accounts)
+        .where(
+          and(
+            inArray(schema.accounts.id, ownedIds),
+            eq(schema.accounts.userId, userId)
+          )
+        );
+
+      return { accountsDeleted: ownedIds.length, tradesDeleted };
     }),
 
   setDefault: protectedProcedure

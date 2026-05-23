@@ -72,6 +72,9 @@ export default function Accounts() {
   const [deleteTradesWithAccount, setDeleteTradesWithAccount] = useState(false)
   const [exportingId, setExportingId] = useState<number | null>(null)
   const [importingId, setImportingId] = useState<number | null>(null)
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [showBulkDelete, setShowBulkDelete] = useState(false)
+  const [bulkDeleteTrades, setBulkDeleteTrades] = useState(false)
 
   const { data: accounts = [], isLoading } = trpc.account.list.useQuery()
   const utils = trpc.useUtils()
@@ -119,6 +122,26 @@ export default function Accounts() {
     onSuccess: () => {
       toast.success("Default account updated")
       invalidate()
+    },
+    onError: (err) => toast.error(err.message),
+  })
+
+  const deleteBulkMutation = trpc.account.deleteBulk.useMutation({
+    onSuccess: (data) => {
+      const parts = [
+        `${data.accountsDeleted} account${data.accountsDeleted !== 1 ? "s" : ""} deleted`,
+      ]
+      if (data.tradesDeleted > 0) {
+        parts.push(
+          `${data.tradesDeleted} trade${data.tradesDeleted !== 1 ? "s" : ""} removed`
+        )
+      }
+      toast.success(parts.join(", "))
+      setSelected(new Set())
+      setShowBulkDelete(false)
+      setBulkDeleteTrades(false)
+      invalidate()
+      utils.trade.list.invalidate()
     },
     onError: (err) => toast.error(err.message),
   })
@@ -222,6 +245,50 @@ export default function Accounts() {
           </div>
         </div>
 
+        {/* Bulk action bar */}
+        {accounts.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/40 p-3">
+            <Checkbox
+              id="acc-select-all"
+              checked={selected.size === accounts.length && accounts.length > 0}
+              onCheckedChange={(v) => {
+                if (Boolean(v)) {
+                  setSelected(new Set(accounts.map((a) => a.id)))
+                } else {
+                  setSelected(new Set())
+                }
+              }}
+            />
+            <Label
+              htmlFor="acc-select-all"
+              className="cursor-pointer text-sm font-medium"
+            >
+              {selected.size === 0
+                ? `Select all (${accounts.length})`
+                : `${selected.size} of ${accounts.length} selected`}
+            </Label>
+            {selected.size > 0 && (
+              <>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setShowBulkDelete(true)}
+                >
+                  <Trash2 className="mr-1.5 h-4 w-4" />
+                  Delete {selected.size} account{selected.size !== 1 ? "s" : ""}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelected(new Set())}
+                >
+                  Clear
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Account List */}
         {isLoading ? (
           <div className="flex h-40 items-center justify-center">
@@ -243,6 +310,16 @@ export default function Accounts() {
               <AccountCard
                 key={account.id}
                 account={account}
+                isSelected={selected.has(account.id)}
+                onToggleSelect={() => {
+                  const next = new Set(selected)
+                  if (next.has(account.id)) {
+                    next.delete(account.id)
+                  } else {
+                    next.add(account.id)
+                  }
+                  setSelected(next)
+                }}
                 onEdit={() => setEditAccount(account)}
                 onDelete={() => setDeleteAccount(account)}
                 onSetDefault={() => setDefaultMutation.mutate({ id: account.id })}
@@ -352,6 +429,89 @@ export default function Accounts() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Bulk Delete Dialog */}
+      <AlertDialog
+        open={showBulkDelete}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowBulkDelete(false)
+            setBulkDeleteTrades(false)
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selected.size} account{selected.size !== 1 ? "s" : ""}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {(() => {
+                const selectedAccounts = accounts.filter((a) => selected.has(a.id))
+                const totalTrades = selectedAccounts.reduce(
+                  (sum, a) => sum + (a.tradeCount ?? 0),
+                  0
+                )
+                return (
+                  <>
+                    You're about to delete{" "}
+                    <span className="font-semibold">{selected.size}</span>{" "}
+                    account{selected.size !== 1 ? "s" : ""}.
+                    {totalTrades > 0 && (
+                      <>
+                        {" "}They hold{" "}
+                        <span className="font-semibold">
+                          {totalTrades} trade{totalTrades !== 1 ? "s" : ""}
+                        </span>{" "}
+                        in total.
+                      </>
+                    )}
+                  </>
+                )
+              })()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="flex items-start gap-3 rounded-md border border-border bg-muted/30 px-3 py-2.5">
+            <Checkbox
+              id="bulk-delete-trades"
+              checked={bulkDeleteTrades}
+              onCheckedChange={(v) => setBulkDeleteTrades(Boolean(v))}
+              className="mt-0.5"
+            />
+            <div className="space-y-0.5">
+              <Label
+                htmlFor="bulk-delete-trades"
+                className="cursor-pointer font-medium"
+              >
+                Also delete all trades on these accounts
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {bulkDeleteTrades
+                  ? "Trades will be permanently removed. This cannot be undone."
+                  : "Trades will be kept and unlinked from these accounts."}
+              </p>
+            </div>
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() =>
+                deleteBulkMutation.mutate({
+                  ids: Array.from(selected),
+                  deleteTrades: bulkDeleteTrades,
+                })
+              }
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {bulkDeleteTrades
+                ? `Delete ${selected.size} account${selected.size !== 1 ? "s" : ""} & trades`
+                : `Delete ${selected.size} account${selected.size !== 1 ? "s" : ""}`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   )
 }
@@ -360,6 +520,8 @@ export default function Accounts() {
 
 function AccountCard({
   account,
+  isSelected,
+  onToggleSelect,
   onEdit,
   onDelete,
   onSetDefault,
@@ -367,6 +529,8 @@ function AccountCard({
   onImport,
 }: {
   account: Account
+  isSelected: boolean
+  onToggleSelect: () => void
   onEdit: () => void
   onDelete: () => void
   onSetDefault: () => void
@@ -377,15 +541,26 @@ function AccountCard({
   const initial = account.name.trim().charAt(0).toUpperCase() || "?"
 
   return (
-    <Card className="overflow-hidden">
+    <Card
+      className={cn(
+        "overflow-hidden transition-colors",
+        isSelected && "ring-2 ring-primary/60"
+      )}
+    >
       {/* Colored top stripe */}
       <div
         className="h-1 w-full"
         style={{ backgroundColor: accountColor }}
       />
       <CardContent className="p-5">
-        {/* Header: avatar + name + default star */}
+        {/* Header: checkbox + avatar + name + default star */}
         <div className="flex items-center gap-3">
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={onToggleSelect}
+            aria-label={`Select ${account.name}`}
+            className="shrink-0"
+          />
           <div
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-base font-semibold text-white"
             style={{ backgroundColor: accountColor }}
