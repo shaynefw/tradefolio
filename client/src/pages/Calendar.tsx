@@ -445,20 +445,25 @@ export default function Calendar() {
 
                   {/* Weekly total cell */}
                   <div className="min-h-[60px] sm:min-h-[90px] border-b border-border/50 border-l border-border p-1.5 sm:p-2 flex flex-col items-center justify-center gap-0.5 bg-card/30">
-                    <span className="text-[9px] sm:text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    <span className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider leading-none">
                       Wk {row + 1}
                     </span>
                     <span
                       className={cn(
-                        "text-xs sm:text-base font-bold",
+                        "text-sm sm:text-lg font-bold leading-tight tabular-nums",
                         weeklyTotals[row].count > 0
-                          ? pnlColor(weeklyTotals[row].pnl)
+                          ? weeklyTotals[row].pnl >= 0
+                            ? "text-green-400"
+                            : "text-red-400"
                           : "text-muted-foreground"
                       )}
                     >
-                      {formatCurrency(weeklyTotals[row].pnl, 0)}
+                      {weeklyTotals[row].pnl >= 0 ? "" : "-"}$
+                      {Math.abs(weeklyTotals[row].pnl) >= 1000
+                        ? `${(Math.abs(weeklyTotals[row].pnl) / 1000).toFixed(1)}k`
+                        : Math.abs(weeklyTotals[row].pnl).toFixed(0)}
                     </span>
-                    <span className="text-[9px] sm:text-[10px] text-muted-foreground hidden sm:block">
+                    <span className="text-[10px] sm:text-xs text-muted-foreground">
                       {weeklyTotals[row].count} trade{weeklyTotals[row].count !== 1 ? "s" : ""}
                     </span>
                   </div>
