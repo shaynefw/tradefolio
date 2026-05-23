@@ -74,12 +74,13 @@ function dayCellBg(stats: DayStats | undefined, isCurrentMonth: boolean): string
   if (!isCurrentMonth) return "bg-transparent opacity-0 pointer-events-none";
   if (!stats || stats.count === 0) return "bg-card/50 text-muted-foreground";
   const pnl = stats.pnl;
-  // Jewel-tone fills with a bright matching border via ring-inset so the
-  // cell looks crisp without disturbing the grid.
+  // Exact brand colors. The layered box-shadow gives each cell a "raised
+  // button" feel: a subtle highlight along the top edge, a darker line at
+  // the bottom, and a small outer drop shadow for lift.
   if (pnl > 0)
-    return "bg-emerald-700/90 ring-1 ring-inset ring-emerald-400";
+    return "bg-[#002e23] ring-1 ring-inset ring-[#129871] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),inset_0_-2px_0_rgba(0,0,0,0.35),0_1px_2px_rgba(0,0,0,0.4)]";
   if (pnl < 0)
-    return "bg-red-800/90 ring-1 ring-inset ring-red-400";
+    return "bg-[#661a1c] ring-1 ring-inset ring-[#df5b5c] shadow-[inset_0_1px_0_rgba(255,255,255,0.1),inset_0_-2px_0_rgba(0,0,0,0.35),0_1px_2px_rgba(0,0,0,0.4)]";
   return "bg-muted/30";
 }
 
@@ -395,12 +396,12 @@ export default function Calendar() {
                           }
                         }}
                         className={cn(
-                          "min-h-[60px] sm:min-h-[90px] border-b border-r border-border/50 p-1.5 sm:p-2 transition-colors",
+                          "min-h-[60px] sm:min-h-[90px] border-b border-r border-border/50 p-1.5 sm:p-2 transition-all",
                           cell.inMonth
                             ? cn(
                                 dayCellBg(stats, true),
                                 hasTrades
-                                  ? "hover:brightness-110 cursor-pointer"
+                                  ? "cursor-pointer hover:brightness-110 hover:-translate-y-px"
                                   : "cursor-default"
                               )
                             : "bg-transparent"
@@ -495,8 +496,8 @@ export default function Calendar() {
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
             <span className="font-medium">Legend:</span>
             {[
-              { label: "Profit day", cls: "bg-emerald-700/90 border border-emerald-400" },
-              { label: "Loss day", cls: "bg-red-800/90 border border-red-400" },
+              { label: "Profit day", cls: "bg-[#002e23] border border-[#129871]" },
+              { label: "Loss day", cls: "bg-[#661a1c] border border-[#df5b5c]" },
               { label: "No trades", cls: "bg-card/50 border border-border" },
             ].map(({ label, cls }) => (
               <div key={label} className="flex items-center gap-1.5">
