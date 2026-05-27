@@ -280,6 +280,102 @@ export default function Analytics() {
     ? cumulativeData[cumulativeData.length - 1].pnl >= 0
     : true;
 
+  // Peak-to-trough drawdown cycles. Walk the equity curve, mark each new
+  // running-high as a peak, track the lowest point inside the dip, and close
+  // a cycle when a fresh new high above the prior peak is hit. The current
+  // unfinished drawdown (if any) is deliberately excluded.
+  const peakToTroughStats = useMemo(() => {
+    const sorted = [...closedTrades]
+      .filter((t) => t.exitDate != null)
+      .sort((a, b) => (a.exitDate ?? 0) - (b.exitDate ?? 0));
+
+    if (sorted.length === 0) return null;
+
+    interface Cycle {
+      peakEquity: number;
+      troughEquity: number;
+      drawdownAmount: number;
+      drawdownPercent: number | null; // null when peak ≤ 0 (% not meaningful)
+      peakTs: number;
+      troughTs: number;
+      recoveryTs: number;
+      recoveryDays: number;
+    }
+
+    let runningMax = -Infinity;
+    let cumPnl = 0;
+    let currentPeak: { equity: number; ts: number } | null = null;
+    let currentTrough: { equity: number; ts: number } | null = null;
+    const cycles: Cycle[] = [];
+
+    for (const t of sorted) {
+      cumPnl += t.netPnl ?? 0;
+      const ts = t.exitDate!;
+
+      if (cumPnl > runningMax) {
+        // Hit a new equity high. If we have a prior peak with a recorded
+        // trough below it, that cycle is now complete.
+        if (
+          currentPeak !== null &&
+          currentTrough !== null &&
+          currentTrough.equity < currentPeak.equity
+        ) {
+          const drawdownAmount = currentPeak.equity - currentTrough.equity;
+          // Only compute % when the peak is positive — a "percent drawdown"
+          // from a negative or zero peak isn't meaningful for a trader.
+          const drawdownPercent =
+            currentPeak.equity > 0
+              ? (drawdownAmount / currentPeak.equity) * 100
+              : null;
+          cycles.push({
+            peakEquity: currentPeak.equity,
+            troughEquity: currentTrough.equity,
+            drawdownAmount,
+            drawdownPercent,
+            peakTs: currentPeak.ts,
+            troughTs: currentTrough.ts,
+            recoveryTs: ts,
+            recoveryDays:
+              (ts - currentPeak.ts) / (1000 * 60 * 60 * 24),
+          });
+        }
+        runningMax = cumPnl;
+        currentPeak = { equity: cumPnl, ts };
+        currentTrough = null;
+      } else if (cumPnl < runningMax) {
+        // In drawdown — track the lowest point seen so far in this dip.
+        if (currentTrough === null || cumPnl < currentTrough.equity) {
+          currentTrough = { equity: cumPnl, ts };
+        }
+      }
+    }
+
+    if (cycles.length === 0) return null;
+
+    const amounts = cycles.map((c) => c.drawdownAmount);
+    const percents = cycles
+      .map((c) => c.drawdownPercent)
+      .filter((p): p is number => p !== null);
+
+    const mean = (arr: number[]) =>
+      arr.length > 0 ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
+    const median = (arr: number[]) => {
+      if (arr.length === 0) return 0;
+      const s = [...arr].sort((a, b) => a - b);
+      const mid = Math.floor(s.length / 2);
+      return s.length % 2 === 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid];
+    };
+
+    return {
+      cycleCount: cycles.length,
+      avgDrawdownAmount: mean(amounts),
+      medianDrawdownAmount: median(amounts),
+      avgDrawdownPercent: percents.length > 0 ? mean(percents) : null,
+      maxDrawdownAmount: Math.max(...amounts),
+      avgRecoveryDays: mean(cycles.map((c) => c.recoveryDays)),
+    };
+  }, [closedTrades]);
+
   // 2. Daily P&L
   const dailyData = useMemo(() => {
     const map = new Map<string, number>();
@@ -1020,6 +1116,100 @@ export default function Analytics() {
                 </Card>
               </section>
             </div>
+
+            {/* Peak-to-Trough Drawdown */}
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <TrendingDown className="h-4 w-4 text-muted-foreground" />
+                <h2 className="text-base font-semibold">
+                  Peak-to-Trough Drawdown
+                </h2>
+              </div>
+              <Card className="bg-card/60">
+                <CardContent className="pt-5 pb-5">
+                  {peakToTroughStats === null ? (
+                    <div className="py-6 text-center">
+                      <p className="text-sm font-medium">
+                        No completed recovery cycles yet
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Once your equity recovers from a drawdown to make a
+                        new high, the cycle will be measured here.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+                        <div>
+                          <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
+                            Avg drawdown
+                          </p>
+                          <p className="text-xl font-bold text-red-400">
+                            {formatCurrency(-peakToTroughStats.avgDrawdownAmount)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
+                            Median
+                          </p>
+                          <p className="text-xl font-bold text-red-400">
+                            {formatCurrency(-peakToTroughStats.medianDrawdownAmount)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
+                            Avg %
+                          </p>
+                          <p className="text-xl font-bold text-red-400">
+                            {peakToTroughStats.avgDrawdownPercent !== null
+                              ? `${peakToTroughStats.avgDrawdownPercent.toFixed(1)}%`
+                              : "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
+                            Worst cycle
+                          </p>
+                          <p className="text-xl font-bold text-red-400">
+                            {formatCurrency(-peakToTroughStats.maxDrawdownAmount)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
+                            Cycles
+                          </p>
+                          <p className="text-xl font-bold text-foreground">
+                            {peakToTroughStats.cycleCount}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
+                            Avg recovery
+                          </p>
+                          <p className="text-xl font-bold text-foreground">
+                            {peakToTroughStats.avgRecoveryDays >= 1
+                              ? `${peakToTroughStats.avgRecoveryDays.toFixed(1)} d`
+                              : `${(peakToTroughStats.avgRecoveryDays * 24).toFixed(1)} h`}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="mt-4 text-xs text-muted-foreground">
+                        Based on{" "}
+                        <span className="font-medium text-foreground">
+                          {peakToTroughStats.cycleCount}
+                        </span>{" "}
+                        completed peak → trough → new-high cycle
+                        {peakToTroughStats.cycleCount !== 1 ? "s" : ""}
+                        {selectedAccountId == null
+                          ? " across all accounts (combined view — most meaningful per single account)"
+                          : ""}
+                        . The current open drawdown is not included.
+                      </p>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </section>
 
             {/* Win/Loss Pie & Drawdown Chart side by side */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
