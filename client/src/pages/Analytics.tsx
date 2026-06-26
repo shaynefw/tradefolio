@@ -142,6 +142,7 @@ export default function Analytics() {
     maxDrawdown,
     maxDrawdownPct,
     recoveryFactor,
+    kellyPct,
     bestTrade,
     worstTrade,
     currentStreak,
@@ -206,6 +207,20 @@ export default function Analytics() {
     // Recovery factor
     const recoveryFactor = maxDrawdown > 0 ? totalPnl / maxDrawdown : totalPnl > 0 ? Infinity : 0;
 
+    // Kelly Criterion: f* = W − (1 − W) / R, where W is win probability and
+    // R is the payoff ratio (avgWin / avgLoss). Returns the fraction of
+    // bankroll to risk per trade. Capped at 1 for the "no losers" edge case;
+    // null when there is no signal (no winners and no losers).
+    const W = winRate / 100;
+    const hasSignal = winners.length > 0 || losers.length > 0;
+    const kellyPct: number | null = !hasSignal
+      ? null
+      : losers.length === 0
+      ? Math.min(W, 1)
+      : winners.length === 0
+      ? -1
+      : W - (1 - W) / (avgWin / avgLoss);
+
     // Streaks
     let curWin = 0;
     let curLoss = 0;
@@ -249,6 +264,7 @@ export default function Analytics() {
       maxDrawdown,
       maxDrawdownPct,
       recoveryFactor,
+      kellyPct,
       bestTrade,
       worstTrade,
       currentStreak,
@@ -721,6 +737,25 @@ export default function Analytics() {
                     : currentStreak > 0
                     ? `Current: ${currentStreak} win streak`
                     : `Current: ${Math.abs(currentStreak)} loss streak`
+                }
+              />
+              <StatCard
+                label="Kelly Criterion"
+                value={
+                  kellyPct === null ? (
+                    <span className="text-muted-foreground">—</span>
+                  ) : (
+                    <span className={kellyPct > 0 ? "text-green-400" : "text-red-400"}>
+                      {(kellyPct * 100).toFixed(1)}%
+                    </span>
+                  )
+                }
+                sub={
+                  kellyPct === null
+                    ? "Need wins and losses"
+                    : kellyPct <= 0
+                    ? "Negative edge — don't size up"
+                    : `Half Kelly: ${(kellyPct * 50).toFixed(1)}% of bankroll`
                 }
               />
             </div>
