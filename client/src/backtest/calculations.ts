@@ -287,23 +287,46 @@ export function computeRrBuckets(ds: BacktestDataset): RrBucket[] {
 }
 
 // ---------------------------------------------------------------------------
-// Recovery metrics — uses the source spreadsheet's "Recovery" flag column.
-// recoveryWinRate is the fraction of flagged recoveries that took profit.
+// Recovery metrics. The source spreadsheet annotates each re-entry trade with
+// either "recovery" (first attempt after a paper loss) or "recovery 2" (second
+// attempt after the first recovery itself failed). The dashboard's headline
+// Recovery WR % is computed across *all* recoveries; Recovery2 WR % is the
+// success rate of the second-attempt subset only.
 // ---------------------------------------------------------------------------
 
 export interface RecoveryStats {
-  flagged: number;
-  wins: number;
-  winRate: number;
+  // First-recovery attempts only.
+  firstCount: number;
+  firstWins: number;
+  firstWinRate: number;
+  // Second-recovery attempts (re-attempt after a first-recovery loss).
+  secondCount: number;
+  secondWins: number;
+  secondWinRate: number;
+  // All recoveries combined — matches the spreadsheet's "Recovery WR %".
+  totalCount: number;
+  totalWins: number;
+  totalWinRate: number;
 }
 
 export function computeRecoveryStats(ds: BacktestDataset): RecoveryStats {
-  const flagged = ds.trades.filter((t) => t.validEntry && t.isRecovery);
-  const wins = flagged.filter((t) => t.outcome === "Took Profit").length;
+  const valid = ds.trades.filter((t) => t.validEntry);
+  const firsts = valid.filter((t) => t.recoveryStage === "first");
+  const seconds = valid.filter((t) => t.recoveryStage === "second");
+  const firstWins = firsts.filter((t) => t.outcome === "Took Profit").length;
+  const secondWins = seconds.filter((t) => t.outcome === "Took Profit").length;
+  const totalCount = firsts.length + seconds.length;
+  const totalWins = firstWins + secondWins;
   return {
-    flagged: flagged.length,
-    wins,
-    winRate: flagged.length > 0 ? wins / flagged.length : 0,
+    firstCount: firsts.length,
+    firstWins,
+    firstWinRate: firsts.length > 0 ? firstWins / firsts.length : 0,
+    secondCount: seconds.length,
+    secondWins,
+    secondWinRate: seconds.length > 0 ? secondWins / seconds.length : 0,
+    totalCount,
+    totalWins,
+    totalWinRate: totalCount > 0 ? totalWins / totalCount : 0,
   };
 }
 

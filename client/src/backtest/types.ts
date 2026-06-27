@@ -8,6 +8,14 @@
 export type Side = "LONG" | "SHORT";
 export type Outcome = "Took Profit" | "Took Loss";
 
+// Recovery stage of a single trade.
+//   - "first":  the planned re-entry after a paper loss (the source spreadsheet
+//               annotates these as "Recovery" or "<note> recovery").
+//   - "second": the re-entry after a *failed* first recovery, annotated
+//               "recovery 2" / "<note> recovery 2".
+//   - "none":   regular trade.
+export type RecoveryStage = "none" | "first" | "second";
+
 export interface ScalingRow {
   pnl: number;       // signed dollars credited on this trade
   balance: number;   // account balance AFTER this trade
@@ -25,7 +33,7 @@ export interface BacktestTrade {
   outcome: Outcome | null;
   mae: number | null;     // points; null when the CSV had "-"
   mfe: number | null;     // points
-  isRecovery: boolean;    // the "Recovery" flag column
+  recoveryStage: RecoveryStage; // parsed from the spreadsheet's recovery col
   premium: ScalingRow | null;
   speed: ScalingRow | null;
   // running streak counters as written by the source spreadsheet; only valid

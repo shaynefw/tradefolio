@@ -5,6 +5,7 @@
 import type {
   BacktestDataset,
   BacktestTrade,
+  RecoveryStage,
   ScalingRow,
   Side,
   Outcome,
@@ -146,7 +147,16 @@ function rowToTrade(row: string[], index: number): BacktestTrade | null {
       ? "Took Loss"
       : null;
 
-  const isRecovery = (row[8] ?? "").trim().toLowerCase() === "recovery";
+  // Recovery markers in the source sheet are free-form text — the same
+  // logical state can appear as "Recovery", "recovery", or with a note
+  // attached like "PA 12 recovery 2". Match on substring, and check
+  // "recovery 2" first so first-recovery doesn't swallow second-recovery.
+  const recoveryRaw = (row[8] ?? "").toLowerCase();
+  const recoveryStage: RecoveryStage = recoveryRaw.includes("recovery 2")
+    ? "second"
+    : recoveryRaw.includes("recovery")
+    ? "first"
+    : "none";
 
   const premium = buildScalingRow(row[9], row[10], row[11]);
   const speed = buildScalingRow(row[12], row[13], row[14]);
@@ -167,7 +177,7 @@ function rowToTrade(row: string[], index: number): BacktestTrade | null {
     outcome,
     mae,
     mfe,
-    isRecovery,
+    recoveryStage,
     premium,
     speed,
     winStreakAt,

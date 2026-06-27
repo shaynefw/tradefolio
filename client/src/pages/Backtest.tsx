@@ -252,11 +252,11 @@ function OverviewTab({
         <StatCard
           label="Recovery WR"
           value={
-            <span className={recovery.winRate >= 0.5 ? "text-green-400" : "text-red-400"}>
-              {fmtPct(recovery.winRate)}
+            <span className={recovery.totalWinRate >= 0.5 ? "text-green-400" : "text-red-400"}>
+              {fmtPct(recovery.totalWinRate)}
             </span>
           }
-          sub={`${recovery.wins} / ${recovery.flagged} flagged`}
+          sub={`${recovery.totalWins} / ${recovery.totalCount} attempts · R2 ${fmtPct(recovery.secondWinRate)}`}
         />
       </div>
 
@@ -518,29 +518,43 @@ function TimingTab({
         </section>
 
         <section className="space-y-3">
-          <SectionHeader icon={TrendingUp} title="Recovery trades" hint="Flagged 'Recovery' in the source." />
+          <SectionHeader icon={TrendingUp} title="Recovery cascade" hint="First attempt → second-chance re-entry." />
           <Card className="bg-card/60">
-            <CardContent className="pt-5 pb-5 space-y-2">
-              <div className="flex items-baseline justify-between">
-                <p className="text-xs uppercase tracking-wider text-muted-foreground">Win rate</p>
-                <p className={cn("text-2xl font-bold", recovery.winRate >= 0.5 ? "text-green-400" : "text-red-400")}>
-                  {fmtPct(recovery.winRate)}
+            <CardContent className="pt-5 pb-5 space-y-3">
+              <div className="flex items-baseline justify-between border-b border-border/40 pb-2">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">Combined WR</p>
+                <p className={cn("text-2xl font-bold", recovery.totalWinRate >= 0.5 ? "text-green-400" : "text-red-400")}>
+                  {fmtPct(recovery.totalWinRate)}
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <p className="text-xs text-muted-foreground">Flagged</p>
-                  <p className="font-semibold">{recovery.flagged}</p>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Recovery (1st)</span>
+                  <span className="font-semibold">
+                    <span className={recovery.firstWinRate >= 0.5 ? "text-green-400" : "text-red-400"}>
+                      {fmtPct(recovery.firstWinRate)}
+                    </span>
+                    <span className="text-xs text-muted-foreground ml-2">
+                      {recovery.firstWins} / {recovery.firstCount}
+                    </span>
+                  </span>
                 </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Wins</p>
-                  <p className="font-semibold text-green-400">{recovery.wins}</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Recovery 2</span>
+                  <span className="font-semibold">
+                    <span className={recovery.secondWinRate >= 0.5 ? "text-green-400" : "text-red-400"}>
+                      {recovery.secondCount === 0 ? "—" : fmtPct(recovery.secondWinRate)}
+                    </span>
+                    <span className="text-xs text-muted-foreground ml-2">
+                      {recovery.secondWins} / {recovery.secondCount}
+                    </span>
+                  </span>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground pt-2">
-                Recovery is a discretionary re-entry following a paper loss. The
-                source spreadsheet maintains additional "Recovery2" and chained
-                recovery counters we'll add once their definitions are confirmed.
+              <p className="text-xs text-muted-foreground pt-1 border-t border-border/40">
+                Recovery 1 follows a paper loss; Recovery 2 fires after a failed
+                first recovery. Failed first attempts equal the count of second
+                attempts.
               </p>
             </CardContent>
           </Card>
@@ -845,8 +859,8 @@ function TradeLogTab({ dataset }: { dataset: ReturnType<typeof getBacktestDatase
       if (!t.validEntry) return false;
       if (side !== "all" && t.side !== side) return false;
       if (outcome !== "all" && t.outcome !== outcome) return false;
-      if (recovery === "yes" && !t.isRecovery) return false;
-      if (recovery === "no" && t.isRecovery) return false;
+      if (recovery === "yes" && t.recoveryStage === "none") return false;
+      if (recovery === "no" && t.recoveryStage !== "none") return false;
       return true;
     });
   }, [dataset.trades, side, outcome, recovery]);
@@ -958,8 +972,14 @@ function TradeLogTab({ dataset }: { dataset: ReturnType<typeof getBacktestDatase
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">{t.mfe ?? "—"}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{t.mae ?? "—"}</td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">
-                      {t.isRecovery ? "✓" : ""}
+                    <td className="px-3 py-2 text-xs">
+                      {t.recoveryStage === "first" ? (
+                        <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-300">R1</span>
+                      ) : t.recoveryStage === "second" ? (
+                        <span className="rounded bg-orange-500/20 px-1.5 py-0.5 font-medium text-orange-300">R2</span>
+                      ) : (
+                        ""
+                      )}
                     </td>
                     <td className={cn("px-3 py-2 text-right tabular-nums", pnlColor(t.premium?.pnl))}>
                       {t.premium ? formatCurrency(t.premium.pnl) : "—"}
