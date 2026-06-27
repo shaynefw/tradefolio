@@ -19,6 +19,7 @@ const ImportTrades = React.lazy(() => import("./pages/Import"));
 const Accounts = React.lazy(() => import("./pages/Accounts"));
 const Tags = React.lazy(() => import("./pages/Tags"));
 const Strategies = React.lazy(() => import("./pages/Strategies"));
+const Backtest = React.lazy(() => import("./pages/Backtest"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 
 function PageLoader() {
@@ -118,6 +119,14 @@ function AppRoutes() {
           {() => (
             <Protected>
               <Strategies />
+            </Protected>
+          )}
+        </Route>
+
+        <Route path="/backtest">
+          {() => (
+            <Protected>
+              <Backtest />
             </Protected>
           )}
         </Route>

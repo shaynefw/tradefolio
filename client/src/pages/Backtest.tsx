@@ -1,0 +1,1036 @@
+import { useMemo, useState } from "react";
+import {
+  Activity,
+  AlertCircle,
+  ArrowDown,
+  ArrowUp,
+  BarChart2,
+  Clock,
+  Database,
+  Layers,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+
+import DashboardLayout from "../components/DashboardLayout";
+import { Card, CardContent } from "../components/ui/card";
+import { Separator } from "../components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { cn, formatCurrency, pnlColor } from "../lib/utils";
+
+import { getBacktestDataset } from "../backtest/dataSource";
+import {
+  computeByHour,
+  computeBySide,
+  computeByTradeNo,
+  computeCoreSummary,
+  computeRecoveryStats,
+  computeRrBuckets,
+  computeScaling,
+} from "../backtest/calculations";
+
+// ---------------------------------------------------------------------------
+// Small primitives — kept local so the Analytics page's StatCard layout stays
+// the single source of truth for the journal area.
+// ---------------------------------------------------------------------------
+
+interface StatCardProps {
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  className?: string;
+}
+
+function StatCard({ label, value, sub, className }: StatCardProps) {
+  return (
+    <Card className={cn("bg-card/60", className)}>
+      <CardContent className="pt-5 pb-5">
+        <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
+        <div className="text-2xl font-bold">{value}</div>
+        {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SectionHeader({
+  icon: Icon,
+  title,
+  hint,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  hint?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+      <div className="flex items-center gap-2">
+        <Icon className="h-4 w-4 text-muted-foreground" />
+        <h2 className="text-base font-semibold">{title}</h2>
+      </div>
+      {hint && (
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      )}
+    </div>
+  );
+}
+
+const fmtPct = (n: number) => `${(n * 100).toFixed(1)}%`;
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
+export default function Backtest() {
+  const ds = useMemo(() => getBacktestDataset(), []);
+  const core = useMemo(() => computeCoreSummary(ds), [ds]);
+  const byHour = useMemo(() => computeByHour(ds), [ds]);
+  const byTradeNo = useMemo(() => computeByTradeNo(ds), [ds]);
+  const bySide = useMemo(() => computeBySide(ds), [ds]);
+  const rr = useMemo(() => computeRrBuckets(ds), [ds]);
+  const recovery = useMemo(() => computeRecoveryStats(ds), [ds]);
+  const premium = useMemo(() => computeScaling(ds, "premium"), [ds]);
+  const speed = useMemo(() => computeScaling(ds, "speed"), [ds]);
+
+  const [tab, setTab] = useState<"overview" | "timing" | "scaling" | "log">("overview");
+
+  return (
+    <DashboardLayout>
+      <div className="p-4 sm:p-6 space-y-6">
+        {/* Page header */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Backtesting</h1>
+            <p className="text-sm text-muted-foreground">
+              Strategy validation and scenario analysis — separate from your live journal.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-2 text-xs">
+            <Database className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-muted-foreground">Dataset:</span>
+            <span className="font-medium text-foreground">{ds.name}</span>
+            <span className="text-muted-foreground">·</span>
+            <span className="text-foreground">{core.validTrades} valid trades</span>
+          </div>
+        </div>
+
+        <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
+          <TabsList className="bg-card/60">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="timing">Timing / Sequence</TabsTrigger>
+            <TabsTrigger value="scaling">Scaling</TabsTrigger>
+            <TabsTrigger value="log">Trade Log</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="space-y-6 mt-6">
+            <OverviewTab
+              core={core}
+              recovery={recovery}
+              premium={premium}
+              speed={speed}
+            />
+          </TabsContent>
+
+          <TabsContent value="timing" className="space-y-6 mt-6">
+            <TimingTab
+              byHour={byHour}
+              byTradeNo={byTradeNo}
+              bySide={bySide}
+              rr={rr}
+              recovery={recovery}
+            />
+          </TabsContent>
+
+          <TabsContent value="scaling" className="space-y-6 mt-6">
+            <ScalingTab premium={premium} speed={speed} />
+          </TabsContent>
+
+          <TabsContent value="log" className="space-y-6 mt-6">
+            <TradeLogTab dataset={ds} />
+          </TabsContent>
+        </Tabs>
+      </div>
+    </DashboardLayout>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Overview tab
+// ---------------------------------------------------------------------------
+
+function OverviewTab({
+  core,
+  recovery,
+  premium,
+  speed,
+}: {
+  core: ReturnType<typeof computeCoreSummary>;
+  recovery: ReturnType<typeof computeRecoveryStats>;
+  premium: ReturnType<typeof computeScaling>;
+  speed: ReturnType<typeof computeScaling>;
+}) {
+  return (
+    <>
+      {/* Headline KPIs */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        <StatCard
+          label="Valid Trades"
+          value={<span className="text-foreground">{core.validTrades.toLocaleString()}</span>}
+          sub={`${core.invalidTrades} invalid · ${core.totalRows.toLocaleString()} total rows`}
+        />
+        <StatCard
+          label="Win Rate"
+          value={
+            <span className={core.winRate >= 0.5 ? "text-green-400" : "text-red-400"}>
+              {fmtPct(core.winRate)}
+            </span>
+          }
+          sub={`${core.wins}W / ${core.losses}L`}
+        />
+        <StatCard
+          label="Profit Factor (4:1)"
+          value={
+            <span className={core.profitFactor41 >= 1 ? "text-green-400" : "text-red-400"}>
+              {core.profitFactor41 === Infinity ? "∞" : core.profitFactor41.toFixed(2)}
+            </span>
+          }
+          sub="Wins × 1R / Losses × 4R"
+        />
+        <StatCard
+          label="Long / Short WR"
+          value={
+            <span className="text-foreground text-base font-semibold">
+              <span className="text-green-400">{fmtPct(core.longWinRate)}</span>
+              <span className="text-muted-foreground mx-2">/</span>
+              <span className="text-blue-400">{fmtPct(core.shortWinRate)}</span>
+            </span>
+          }
+          sub={`${core.longCount} long · ${core.shortCount} short`}
+        />
+        <StatCard
+          label="Streaks"
+          value={
+            <span className="text-foreground">
+              {core.maxWinStreak}W / {core.maxLossStreak}L
+            </span>
+          }
+          sub={`Avg win streak ${core.avgWinStreak}`}
+        />
+        <StatCard
+          label="Avg MFE / MAE (Win)"
+          value={
+            <span className="text-foreground">
+              {core.avgMfeWinners} / {core.avgMaeWinners}
+              <span className="text-xs text-muted-foreground ml-1">pts</span>
+            </span>
+          }
+          sub="Mean favorable / adverse — winners"
+        />
+        <StatCard
+          label="Avg MFE / MAE (Loss)"
+          value={
+            <span className="text-foreground">
+              {core.avgMfeLosers} / {core.avgMaeLosers}
+              <span className="text-xs text-muted-foreground ml-1">pts</span>
+            </span>
+          }
+          sub="Mean favorable / adverse — losers"
+        />
+        <StatCard
+          label="Recovery WR"
+          value={
+            <span className={recovery.winRate >= 0.5 ? "text-green-400" : "text-red-400"}>
+              {fmtPct(recovery.winRate)}
+            </span>
+          }
+          sub={`${recovery.wins} / ${recovery.flagged} flagged`}
+        />
+      </div>
+
+      <Separator />
+
+      {/* Scaling summary cards */}
+      <SectionHeader
+        icon={Layers}
+        title="Scaling outcomes"
+        hint="Two stake schedules applied to the same trade sequence."
+      />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <ScalingSummary
+          name="Real $ Premium Scaling"
+          accent="emerald"
+          series={premium}
+        />
+        <ScalingSummary
+          name="Real $ Speed Scaling"
+          accent="sky"
+          series={speed}
+        />
+      </div>
+    </>
+  );
+}
+
+function ScalingSummary({
+  name,
+  accent,
+  series,
+}: {
+  name: string;
+  accent: "emerald" | "sky";
+  series: ReturnType<typeof computeScaling>;
+}) {
+  const positive = series.netPnl >= 0;
+  const accentClass = accent === "emerald" ? "text-emerald-400" : "text-sky-400";
+  return (
+    <Card className="bg-card/60">
+      <CardContent className="pt-5 pb-5 space-y-3">
+        <div className="flex items-baseline justify-between">
+          <p className="text-sm font-semibold">{name}</p>
+          <span className={cn("text-xs", accentClass)}>{series.trades} scaling trades</span>
+        </div>
+        <div className="grid grid-cols-3 gap-3 text-sm">
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Start</p>
+            <p className="font-semibold">{formatCurrency(series.start)}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">End</p>
+            <p className="font-semibold">{formatCurrency(series.end)}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Net P&L</p>
+            <p className={cn("font-semibold", pnlColor(series.netPnl))}>
+              {positive ? "+" : ""}
+              {formatCurrency(series.netPnl)}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Peak</p>
+            <p className="font-semibold">{formatCurrency(series.maxBalance)}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Max DD</p>
+            <p className="font-semibold text-red-400">
+              {formatCurrency(-series.maxDrawdown)}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">DD %</p>
+            <p className="font-semibold text-red-400">
+              {series.maxDrawdownPercent.toFixed(1)}%
+            </p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Timing / Sequence tab
+// ---------------------------------------------------------------------------
+
+function TimingTab({
+  byHour,
+  byTradeNo,
+  bySide,
+  rr,
+  recovery,
+}: {
+  byHour: ReturnType<typeof computeByHour>;
+  byTradeNo: ReturnType<typeof computeByTradeNo>;
+  bySide: ReturnType<typeof computeBySide>;
+  rr: ReturnType<typeof computeRrBuckets>;
+  recovery: ReturnType<typeof computeRecoveryStats>;
+}) {
+  const hourData = byHour.map((b) => ({
+    hour: b.hourLabel,
+    winRate: Number((b.winRate * 100).toFixed(1)),
+    trades: b.trades,
+  }));
+
+  const tradeNoData = byTradeNo.map((b) => ({
+    label: b.label,
+    winRate: Number((b.winRate * 100).toFixed(1)),
+    lwr: Number((b.longWinRate * 100).toFixed(1)),
+    swr: Number((b.shortWinRate * 100).toFixed(1)),
+    count: b.trades,
+  }));
+
+  return (
+    <div className="space-y-6">
+      {/* Hourly */}
+      <section className="space-y-3">
+        <SectionHeader
+          icon={Clock}
+          title="Performance by hour of day"
+          hint="Win rate per hour. Trade volume shown in tooltip and below."
+        />
+        <Card className="bg-card/60">
+          <CardContent className="pt-4">
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={hourData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="hour" tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} />
+                <YAxis
+                  tickFormatter={(v) => `${v}%`}
+                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={42}
+                  domain={[0, 100]}
+                />
+                <RechartsTooltip
+                  cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                  content={({ active, payload, label }) =>
+                    active && payload && payload.length ? (
+                      <div className="rounded-lg border border-border bg-zinc-900 px-3 py-2 shadow-xl text-sm">
+                        <p className="text-muted-foreground mb-1">{label}</p>
+                        <p className="font-semibold text-foreground">
+                          <span className="text-muted-foreground mr-2">Win rate:</span>
+                          {`${payload[0].value}%`}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {(payload[0].payload as { trades?: number })?.trades} trades
+                        </p>
+                      </div>
+                    ) : null
+                  }
+                />
+                <Bar dataKey="winRate" name="Win Rate" fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={48} isAnimationActive={false}>
+                  {hourData.map((d, i) => (
+                    <Cell key={i} fill={d.winRate >= 80 ? "#22c55e" : d.winRate >= 65 ? "#a3e635" : "#ef4444"} fillOpacity={0.9} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+            <div className="mt-2 grid grid-cols-9 gap-1 px-12 text-center text-[10px] text-muted-foreground">
+              {hourData.map((d) => (
+                <div key={d.hour} title={`${d.trades} trades`}>
+                  n={d.trades}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Trade # */}
+      <section className="space-y-3">
+        <SectionHeader
+          icon={BarChart2}
+          title="Performance by intraday trade number"
+          hint="T1 = first signal of the day, T2 = second, etc. Long vs short overlay."
+        />
+        <Card className="bg-card/60">
+          <CardContent className="pt-4">
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={tradeNoData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} />
+                <YAxis
+                  tickFormatter={(v) => `${v}%`}
+                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={42}
+                  domain={[0, 100]}
+                />
+                <RechartsTooltip
+                  cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                  content={({ active, payload, label }) =>
+                    active && payload && payload.length ? (
+                      <div className="rounded-lg border border-border bg-zinc-900 px-3 py-2 shadow-xl text-sm">
+                        <p className="text-muted-foreground mb-1">{label}</p>
+                        {payload.map((p, i) => (
+                          <p key={i} className="font-semibold text-foreground">
+                            <span className="text-muted-foreground mr-2">{p.name}:</span>
+                            {`${p.value}%`}
+                          </p>
+                        ))}
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {(payload[0].payload as { count?: number })?.count} trades
+                        </p>
+                      </div>
+                    ) : null
+                  }
+                />
+                <Bar dataKey="winRate" name="WR" fill="#a3e635" fillOpacity={0.9} radius={[3, 3, 0, 0]} maxBarSize={20} isAnimationActive={false} />
+                <Bar dataKey="lwr" name="Long WR" fill="#22c55e" fillOpacity={0.75} radius={[3, 3, 0, 0]} maxBarSize={20} isAnimationActive={false} />
+                <Bar dataKey="swr" name="Short WR" fill="#38bdf8" fillOpacity={0.75} radius={[3, 3, 0, 0]} maxBarSize={20} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Side breakdown + Recovery + RR side by side on wide screens */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <section className="space-y-3">
+          <SectionHeader icon={Activity} title="Long vs Short" />
+          <Card className="bg-card/60">
+            <CardContent className="pt-5 pb-5 space-y-4">
+              {bySide.map((s) => (
+                <div key={s.side} className="space-y-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      {s.side === "LONG" ? (
+                        <ArrowUp className="h-3.5 w-3.5 text-green-400" />
+                      ) : (
+                        <ArrowDown className="h-3.5 w-3.5 text-blue-400" />
+                      )}
+                      <span className="font-medium">{s.side}</span>
+                    </div>
+                    <span className={cn("font-semibold", s.winRate >= 0.5 ? "text-green-400" : "text-red-400")}>
+                      {fmtPct(s.winRate)}
+                    </span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-muted/40 overflow-hidden">
+                    <div
+                      className={cn(
+                        "h-full",
+                        s.side === "LONG" ? "bg-green-400" : "bg-blue-400",
+                      )}
+                      style={{ width: `${(s.winRate * 100).toFixed(1)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {s.wins}W / {s.losses}L · {s.trades} trades
+                  </p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="space-y-3">
+          <SectionHeader icon={TrendingUp} title="Recovery trades" hint="Flagged 'Recovery' in the source." />
+          <Card className="bg-card/60">
+            <CardContent className="pt-5 pb-5 space-y-2">
+              <div className="flex items-baseline justify-between">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">Win rate</p>
+                <p className={cn("text-2xl font-bold", recovery.winRate >= 0.5 ? "text-green-400" : "text-red-400")}>
+                  {fmtPct(recovery.winRate)}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground">Flagged</p>
+                  <p className="font-semibold">{recovery.flagged}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Wins</p>
+                  <p className="font-semibold text-green-400">{recovery.wins}</p>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground pt-2">
+                Recovery is a discretionary re-entry following a paper loss. The
+                source spreadsheet maintains additional "Recovery2" and chained
+                recovery counters we'll add once their definitions are confirmed.
+              </p>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="space-y-3">
+          <SectionHeader icon={Layers} title="RR-bucket reach" hint="Approximation — see note." />
+          <Card className="bg-card/60">
+            <CardContent className="pt-5 pb-5">
+              <div className="overflow-hidden rounded-md border border-border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2 text-left">RR</th>
+                      <th className="px-3 py-2 text-right">Hit %</th>
+                      <th className="px-3 py-2 text-right">Count</th>
+                      <th className="px-3 py-2 text-right">PF (vs 8R stop)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rr.map((r) => (
+                      <tr key={r.r} className="border-t border-border/40">
+                        <td className="px-3 py-2 font-medium">{r.label}</td>
+                        <td className="px-3 py-2 text-right">{fmtPct(r.hitRate)}</td>
+                        <td className="px-3 py-2 text-right">{r.hitCount}</td>
+                        <td className="px-3 py-2 text-right">
+                          {r.profitFactor === Infinity ? "∞" : r.profitFactor.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-xs text-amber-200/90">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <p>
+                  Hit % = trades whose MFE reached N × brick. The source sheet's
+                  PF / Ez$ formulas use a different closed form — we'll
+                  re-implement once you share them.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Scaling tab
+// ---------------------------------------------------------------------------
+
+function ScalingTab({
+  premium,
+  speed,
+}: {
+  premium: ReturnType<typeof computeScaling>;
+  speed: ReturnType<typeof computeScaling>;
+}) {
+  return (
+    <div className="space-y-6">
+      <ScalingChart name="Real $ Premium Scaling" series={premium} colorA="#22c55e" />
+      <ScalingChart name="Real $ Speed Scaling" series={speed} colorA="#38bdf8" />
+
+      {/* Milestone (loss / recovery) events from both series */}
+      <MilestoneTable premium={premium} speed={speed} />
+    </div>
+  );
+}
+
+function ScalingChart({
+  name,
+  series,
+  colorA,
+}: {
+  name: string;
+  series: ReturnType<typeof computeScaling>;
+  colorA: string;
+}) {
+  const gradientId = `grad-${name.replace(/\W+/g, "")}`;
+  return (
+    <section className="space-y-3">
+      <SectionHeader icon={TrendingUp} title={name} />
+      <Card className="bg-card/60">
+        <CardContent className="pt-4">
+          <ResponsiveContainer width="100%" height={300}>
+            <AreaChart data={series.points} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
+              <defs>
+                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={colorA} stopOpacity={0.4} />
+                  <stop offset="95%" stopColor={colorA} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+              <XAxis
+                dataKey="index"
+                tick={{ fontSize: 11, fill: "#6b7280" }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v) => `#${v}`}
+              />
+              <YAxis
+                tickFormatter={(v) => formatCurrency(v, 0)}
+                tick={{ fontSize: 11, fill: "#6b7280" }}
+                tickLine={false}
+                axisLine={false}
+                width={70}
+                domain={["dataMin", "dataMax"]}
+              />
+              <RechartsTooltip
+                cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                content={({ active, payload }) => {
+                  if (!active || !payload || !payload.length) return null;
+                  const p = payload[0].payload as {
+                    index: number;
+                    date: string;
+                    balance: number;
+                    pnl: number;
+                    label: string | null;
+                  };
+                  return (
+                    <div className="rounded-lg border border-border bg-zinc-900 px-3 py-2 shadow-xl text-sm">
+                      <p className="text-muted-foreground mb-1">
+                        #{p.index} · {p.date}
+                      </p>
+                      <p className="font-semibold text-foreground">{formatCurrency(p.balance)}</p>
+                      <p className={cn("text-xs", pnlColor(p.pnl))}>
+                        {p.pnl >= 0 ? "+" : ""}
+                        {formatCurrency(p.pnl)}
+                      </p>
+                      {p.label && (
+                        <p className="text-xs text-amber-300 mt-1">{p.label}</p>
+                      )}
+                    </div>
+                  );
+                }}
+              />
+              <ReferenceLine y={series.start} stroke="rgba(255,255,255,0.15)" strokeDasharray="4 4" />
+              <Area
+                type="monotone"
+                dataKey="balance"
+                stroke={colorA}
+                strokeWidth={2}
+                fill={`url(#${gradientId})`}
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+
+          <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+            <div>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Start → End</p>
+              <p className="font-semibold">
+                {formatCurrency(series.start)} → {formatCurrency(series.end)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Net P&L</p>
+              <p className={cn("font-semibold", pnlColor(series.netPnl))}>
+                {series.netPnl >= 0 ? "+" : ""}
+                {formatCurrency(series.netPnl)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Max DD</p>
+              <p className="font-semibold text-red-400">
+                {formatCurrency(-series.maxDrawdown)} ({series.maxDrawdownPercent.toFixed(1)}%)
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Events</p>
+              <p className="font-semibold">{series.milestones} labeled</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+function MilestoneTable({
+  premium,
+  speed,
+}: {
+  premium: ReturnType<typeof computeScaling>;
+  speed: ReturnType<typeof computeScaling>;
+}) {
+  // Merge milestones by index so the Premium/Speed labels show side-by-side.
+  type Row = {
+    index: number;
+    date: string;
+    premiumLabel: string | null;
+    premiumBalance: number | null;
+    speedLabel: string | null;
+    speedBalance: number | null;
+  };
+  const rows: Row[] = [];
+  const max = Math.max(premium.points.length, speed.points.length);
+  for (let i = 0; i < max; i++) {
+    const p = premium.points[i];
+    const s = speed.points[i];
+    if (!p?.isMilestone && !s?.isMilestone) continue;
+    rows.push({
+      index: p?.index ?? s!.index,
+      date: p?.date ?? s!.date,
+      premiumLabel: p?.label ?? null,
+      premiumBalance: p?.balance ?? null,
+      speedLabel: s?.label ?? null,
+      speedBalance: s?.balance ?? null,
+    });
+  }
+
+  return (
+    <section className="space-y-3">
+      <SectionHeader icon={Activity} title="Milestone events" hint="Labeled loss/recovery markers from both series." />
+      <Card className="bg-card/60">
+        <CardContent className="pt-4">
+          {rows.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-6 text-center">No labeled events in this dataset.</p>
+          ) : (
+            <div className="overflow-hidden rounded-md border border-border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 text-left">#</th>
+                    <th className="px-3 py-2 text-left">Date</th>
+                    <th className="px-3 py-2 text-left">Premium</th>
+                    <th className="px-3 py-2 text-right">Premium balance</th>
+                    <th className="px-3 py-2 text-left">Speed</th>
+                    <th className="px-3 py-2 text-right">Speed balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.index} className="border-t border-border/40">
+                      <td className="px-3 py-2 text-muted-foreground">#{r.index}</td>
+                      <td className="px-3 py-2">{r.date}</td>
+                      <td className="px-3 py-2">
+                        {r.premiumLabel && (
+                          <span
+                            className={cn(
+                              "rounded px-1.5 py-0.5 text-xs font-medium",
+                              /loss/i.test(r.premiumLabel)
+                                ? "bg-red-500/15 text-red-300"
+                                : "bg-emerald-500/15 text-emerald-300",
+                            )}
+                          >
+                            {r.premiumLabel}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right font-medium">
+                        {r.premiumBalance != null ? formatCurrency(r.premiumBalance) : "—"}
+                      </td>
+                      <td className="px-3 py-2">
+                        {r.speedLabel && (
+                          <span
+                            className={cn(
+                              "rounded px-1.5 py-0.5 text-xs font-medium",
+                              /loss/i.test(r.speedLabel)
+                                ? "bg-red-500/15 text-red-300"
+                                : "bg-sky-500/15 text-sky-300",
+                            )}
+                          >
+                            {r.speedLabel}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right font-medium">
+                        {r.speedBalance != null ? formatCurrency(r.speedBalance) : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Trade Log tab
+// ---------------------------------------------------------------------------
+
+type SideFilter = "all" | "LONG" | "SHORT";
+type OutcomeFilter = "all" | "Took Profit" | "Took Loss";
+
+function TradeLogTab({ dataset }: { dataset: ReturnType<typeof getBacktestDataset> }) {
+  const [side, setSide] = useState<SideFilter>("all");
+  const [outcome, setOutcome] = useState<OutcomeFilter>("all");
+  const [recovery, setRecovery] = useState<"all" | "yes" | "no">("all");
+  const [page, setPage] = useState(0);
+  const pageSize = 50;
+
+  const rows = useMemo(() => {
+    return dataset.trades.filter((t) => {
+      if (!t.validEntry) return false;
+      if (side !== "all" && t.side !== side) return false;
+      if (outcome !== "all" && t.outcome !== outcome) return false;
+      if (recovery === "yes" && !t.isRecovery) return false;
+      if (recovery === "no" && t.isRecovery) return false;
+      return true;
+    });
+  }, [dataset.trades, side, outcome, recovery]);
+
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const visible = rows.slice(page * pageSize, (page + 1) * pageSize);
+
+  return (
+    <div className="space-y-4">
+      {/* Filter chips */}
+      <div className="flex flex-wrap items-center gap-2">
+        <FilterGroup
+          label="Side"
+          value={side}
+          onChange={(v) => {
+            setSide(v as SideFilter);
+            setPage(0);
+          }}
+          options={[
+            { value: "all", label: "All" },
+            { value: "LONG", label: "Long" },
+            { value: "SHORT", label: "Short" },
+          ]}
+        />
+        <FilterGroup
+          label="Outcome"
+          value={outcome}
+          onChange={(v) => {
+            setOutcome(v as OutcomeFilter);
+            setPage(0);
+          }}
+          options={[
+            { value: "all", label: "All" },
+            { value: "Took Profit", label: "Wins" },
+            { value: "Took Loss", label: "Losses" },
+          ]}
+        />
+        <FilterGroup
+          label="Recovery"
+          value={recovery}
+          onChange={(v) => {
+            setRecovery(v as "all" | "yes" | "no");
+            setPage(0);
+          }}
+          options={[
+            { value: "all", label: "All" },
+            { value: "yes", label: "Recovery" },
+            { value: "no", label: "Regular" },
+          ]}
+        />
+        <span className="ml-auto text-xs text-muted-foreground">
+          {rows.length.toLocaleString()} rows · page {page + 1} of {pageCount}
+        </span>
+      </div>
+
+      <Card className="bg-card/60">
+        <CardContent className="pt-4 pb-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 text-left">#</th>
+                  <th className="px-3 py-2 text-left">Date</th>
+                  <th className="px-3 py-2 text-left">Time</th>
+                  <th className="px-3 py-2 text-left">Side</th>
+                  <th className="px-3 py-2 text-left">Trade</th>
+                  <th className="px-3 py-2 text-left">Outcome</th>
+                  <th className="px-3 py-2 text-right">MFE</th>
+                  <th className="px-3 py-2 text-right">MAE</th>
+                  <th className="px-3 py-2 text-left">Recovery</th>
+                  <th className="px-3 py-2 text-right">Premium $</th>
+                  <th className="px-3 py-2 text-right">Speed $</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((t) => (
+                  <tr key={t.index} className="border-t border-border/40 hover:bg-accent/20">
+                    <td className="px-3 py-2 text-xs text-muted-foreground">{t.index + 1}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {t.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">{t.time}</td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={cn(
+                          "rounded px-1.5 py-0.5 text-xs font-medium",
+                          t.side === "LONG"
+                            ? "bg-green-500/15 text-green-300"
+                            : "bg-blue-500/15 text-blue-300",
+                        )}
+                      >
+                        {t.side}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">T{t.tradeNo}</td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={cn(
+                          "rounded px-1.5 py-0.5 text-xs font-medium",
+                          t.outcome === "Took Profit"
+                            ? "bg-emerald-500/15 text-emerald-300"
+                            : t.outcome === "Took Loss"
+                            ? "bg-red-500/15 text-red-300"
+                            : "bg-muted/40 text-muted-foreground",
+                        )}
+                      >
+                        {t.outcome ?? "—"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">{t.mfe ?? "—"}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{t.mae ?? "—"}</td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">
+                      {t.isRecovery ? "✓" : ""}
+                    </td>
+                    <td className={cn("px-3 py-2 text-right tabular-nums", pnlColor(t.premium?.pnl))}>
+                      {t.premium ? formatCurrency(t.premium.pnl) : "—"}
+                    </td>
+                    <td className={cn("px-3 py-2 text-right tabular-nums", pnlColor(t.speed?.pnl))}>
+                      {t.speed ? formatCurrency(t.speed.pnl) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-border/40 px-3 py-2 text-xs text-muted-foreground">
+            <div>
+              Showing {visible.length === 0 ? 0 : page * pageSize + 1}–{page * pageSize + visible.length}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                className="rounded border border-border bg-muted/40 px-2 py-1 disabled:opacity-40"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+              >
+                Prev
+              </button>
+              <button
+                className="rounded border border-border bg-muted/40 px-2 py-1 disabled:opacity-40"
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                disabled={page >= pageCount - 1}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function FilterGroup({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-2 py-1">
+      <span className="text-xs uppercase tracking-wider text-muted-foreground">{label}</span>
+      <div className="flex gap-1">
+        {options.map((o) => (
+          <button
+            key={o.value}
+            onClick={() => onChange(o.value)}
+            className={cn(
+              "rounded-md px-2 py-1 text-xs transition-colors",
+              value === o.value
+                ? "bg-accent text-accent-foreground font-medium"
+                : "text-muted-foreground hover:bg-accent/40 hover:text-foreground",
+            )}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+

@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   Menu,
   X,
+  FlaskConical,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -46,6 +47,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Accounts", icon: Wallet, href: "/accounts" },
   { label: "Tags", icon: Tag, href: "/tags" },
   { label: "Strategies", icon: Target, href: "/strategies" },
+  { label: "Backtesting", icon: FlaskConical, href: "/backtest" },
 ];
 
 // ---------------------------------------------------------------------------
