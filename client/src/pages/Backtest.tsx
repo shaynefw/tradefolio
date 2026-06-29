@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import {
   Activity,
-  AlertCircle,
   ArrowDown,
   ArrowUp,
   BarChart2,
@@ -151,6 +150,7 @@ export default function Backtest() {
               bySide={bySide}
               rr={rr}
               recovery={recovery}
+              stopPoints={ds.stopBricks * ds.brickPoints}
             />
           </TabsContent>
 
@@ -258,6 +258,16 @@ function OverviewTab({
           }
           sub={`${recovery.totalWins} / ${recovery.totalCount} attempts · R2 ${fmtPct(recovery.secondWinRate)}`}
         />
+        <StatCard
+          label="Avg Net Wins / Month"
+          value={
+            <span className={core.avgNetWinsPerMonth >= 0 ? "text-green-400" : "text-red-400"}>
+              {core.avgNetWinsPerMonth >= 0 ? "+" : ""}
+              {core.avgNetWinsPerMonth.toFixed(0)}
+            </span>
+          }
+          sub={`(wins − losses) / ${core.monthsSpanned} months`}
+        />
       </div>
 
       <Separator />
@@ -350,13 +360,16 @@ function TimingTab({
   bySide,
   rr,
   recovery,
+  stopPoints,
 }: {
   byHour: ReturnType<typeof computeByHour>;
   byTradeNo: ReturnType<typeof computeByTradeNo>;
   bySide: ReturnType<typeof computeBySide>;
   rr: ReturnType<typeof computeRrBuckets>;
   recovery: ReturnType<typeof computeRecoveryStats>;
+  stopPoints: number;
 }) {
+  const dsStopPoints = stopPoints;
   const hourData = byHour.map((b) => ({
     hour: b.hourLabel,
     winRate: Number((b.winRate * 100).toFixed(1)),
@@ -561,7 +574,11 @@ function TimingTab({
         </section>
 
         <section className="space-y-3">
-          <SectionHeader icon={Layers} title="RR-bucket reach" hint="Approximation — see note." />
+          <SectionHeader
+            icon={Layers}
+            title="RR-bucket reach"
+            hint={`Threshold = N × stop (${dsStopPoints} pts).`}
+          />
           <Card className="bg-card/60">
             <CardContent className="pt-5 pb-5">
               <div className="overflow-hidden rounded-md border border-border">
@@ -569,33 +586,27 @@ function TimingTab({
                   <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
                     <tr>
                       <th className="px-3 py-2 text-left">RR</th>
-                      <th className="px-3 py-2 text-right">Hit %</th>
-                      <th className="px-3 py-2 text-right">Count</th>
-                      <th className="px-3 py-2 text-right">PF (vs 8R stop)</th>
+                      <th className="px-3 py-2 text-right">WR</th>
+                      <th className="px-3 py-2 text-right">Ez$</th>
+                      <th className="px-3 py-2 text-right">Trades</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rr.map((r) => (
                       <tr key={r.r} className="border-t border-border/40">
                         <td className="px-3 py-2 font-medium">{r.label}</td>
-                        <td className="px-3 py-2 text-right">{fmtPct(r.hitRate)}</td>
-                        <td className="px-3 py-2 text-right">{r.hitCount}</td>
-                        <td className="px-3 py-2 text-right">
-                          {r.profitFactor === Infinity ? "∞" : r.profitFactor.toFixed(2)}
-                        </td>
+                        <td className="px-3 py-2 text-right text-green-400 font-semibold">{fmtPct(r.winRate)}</td>
+                        <td className="px-3 py-2 text-right text-muted-foreground">{fmtPct(r.ez)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{r.tradeCount}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-xs text-amber-200/90">
-                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <p>
-                  Hit % = trades whose MFE reached N × brick. The source sheet's
-                  PF / Ez$ formulas use a different closed form — we'll
-                  re-implement once you share them.
-                </p>
-              </div>
+              <p className="mt-3 text-xs text-muted-foreground">
+                WR = trades whose MFE reached the 1:N target. Ez$ = 1 − WR — the
+                share of "easy" exits that didn't push to N × stop.
+              </p>
             </CardContent>
           </Card>
         </section>

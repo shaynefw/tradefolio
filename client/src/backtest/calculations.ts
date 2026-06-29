@@ -30,6 +30,10 @@ export interface CoreSummary {
   // dollar ratio (e.g. +$80 per win, -$320 per loss). Computed against unit R
   // so it stays meaningful even before user supplies real dollar sizing.
   profitFactor41: number;
+  // Average net wins per calendar month spanned (wins − losses ÷ months).
+  // Matches the source spreadsheet's "Avg Net Wins/m".
+  avgNetWinsPerMonth: number;
+  monthsSpanned: number;
 }
 
 const valid = (t: BacktestTrade) => t.validEntry;
@@ -66,6 +70,16 @@ export function computeCoreSummary(ds: BacktestDataset): CoreSummary {
   const grossLossR = losses.length * 4;
   const profitFactor41 = grossLossR > 0 ? grossWinR / grossLossR : grossWinR > 0 ? Infinity : 0;
 
+  // Span in distinct YYYY-MM buckets — partial months count as 1 month each,
+  // mirroring how the source spreadsheet counts.
+  const monthKeys = new Set<string>();
+  for (const t of validTrades) {
+    monthKeys.add(`${t.date.getFullYear()}-${t.date.getMonth()}`);
+  }
+  const monthsSpanned = monthKeys.size;
+  const netWins = wins.length - losses.length;
+  const avgNetWinsPerMonth = monthsSpanned > 0 ? netWins / monthsSpanned : 0;
+
   return {
     totalRows: ds.trades.length,
     validTrades: validTrades.length,
@@ -85,6 +99,8 @@ export function computeCoreSummary(ds: BacktestDataset): CoreSummary {
     avgMfeLosers: Math.round(mean(loserMfes)),
     avgMaeLosers: Math.round(mean(loserMaes)),
     profitFactor41,
+    avgNetWinsPerMonth,
+    monthsSpanned,
   };
 }
 
@@ -242,45 +258,43 @@ export function computeByTradeNo(ds: BacktestDataset): TradeNoBucket[] {
 
 // ---------------------------------------------------------------------------
 // RR-bucket analysis (1:1RR … 1:5RR).
-// Interpretation: a trade "reaches" an N-R level when its favorable excursion
-// (MFE) hit at least N × brickPoints points before exit. With the spreadsheet's
-// stop at 8R, this is a useful approximation of "could you have exited there?"
-// — but the original sheet's PF/Ez$ columns appear to use a different
-// closed-form that we don't yet have. Surface this as an approximation in the
-// UI and we'll refine once the exact formula is shared.
+//
+// A trade "counts" at level 1:NRR when its favorable excursion reached at
+// least N times the strategy's stop distance — i.e. it would have hit a 1:N
+// risk-reward target before the stop. So at brick=20 and stopBricks=8, the
+// stop is 160 points and the 1:3RR threshold is 480 points of MFE.
+//
+//   tradeCount = |{ valid trades : MFE ≥ N × stopPoints }|
+//   winRate    = tradeCount / validTrades
+//   ez         = 1 − winRate   ("easy" exits — trades that didn't push that far)
+//
+// Matches the source spreadsheet within rounding (sheet rounds to whole %).
 // ---------------------------------------------------------------------------
 
 export interface RrBucket {
-  r: number;            // 1..5
-  label: string;        // "1:1RR"
-  hitCount: number;     // trades with MFE ≥ r × brick
-  hitRate: number;      // hitCount / validDecisive
-  ez: number;           // hitCount / (hitCount + remainingNotHit) — placeholder
-  profitFactor: number; // hitCount × r / (validDecisive − hitCount) × stopBricks
+  r: number;       // 1..5
+  label: string;   // "1:1RR"
+  tradeCount: number; // trades whose MFE met or exceeded N × stop
+  winRate: number;    // tradeCount / total valid
+  ez: number;         // 1 − winRate
 }
 
 export function computeRrBuckets(ds: BacktestDataset): RrBucket[] {
-  const decisive = ds.trades.filter(
-    (t) => t.validEntry && t.outcome != null,
-  );
-  const denom = decisive.length;
-  const stop = ds.stopBricks;
+  const valid = ds.trades.filter((t) => t.validEntry);
+  const denom = valid.length;
+  const stopPoints = ds.stopBricks * ds.brickPoints;
   const buckets: RrBucket[] = [];
 
   for (let r = 1; r <= 5; r++) {
-    const thresh = r * ds.brickPoints;
-    const hitCount = decisive.filter((t) => (t.mfe ?? -Infinity) >= thresh).length;
-    const miss = denom - hitCount;
-    const grossWin = hitCount * r;
-    const grossLoss = miss * stop;
-    const pf = grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? Infinity : 0;
+    const thresh = r * stopPoints;
+    const tradeCount = valid.filter((t) => (t.mfe ?? -Infinity) >= thresh).length;
+    const winRate = denom > 0 ? tradeCount / denom : 0;
     buckets.push({
       r,
       label: `1:${r}RR`,
-      hitCount,
-      hitRate: denom > 0 ? hitCount / denom : 0,
-      ez: denom > 0 ? hitCount / denom : 0,
-      profitFactor: pf,
+      tradeCount,
+      winRate,
+      ez: 1 - winRate,
     });
   }
   return buckets;
