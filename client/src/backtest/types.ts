@@ -24,6 +24,7 @@ export interface ScalingRow {
 
 export interface BacktestTrade {
   index: number;          // 0-based position in the parsed sequence
+  id?: number;            // server id when sourced from the DB (undefined for sample-parse)
   date: Date;             // entry date (midnight in local TZ)
   time: string;           // raw "9:00:00 AM" — kept verbatim for display
   hour: number;           // 0-23

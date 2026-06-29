@@ -100,10 +100,9 @@ const datasetRouter = router({
         takeProfitBricks: schema.backtestDatasets.takeProfitBricks,
         createdAt: schema.backtestDatasets.createdAt,
         updatedAt: schema.backtestDatasets.updatedAt,
-        tradeCount: sql<number>`(
-          SELECT COUNT(*) FROM ${schema.backtestTrades}
-          WHERE ${schema.backtestTrades.datasetId} = ${schema.backtestDatasets.id}
-        )`,
+        // Subquery counted via raw SQL — drizzle's sql template wasn't
+        // rendering the table reference inside the COUNT correctly.
+        tradeCount: sql<number>`(SELECT COUNT(*) FROM backtest_trades WHERE backtest_trades.dataset_id = backtest_datasets.id)`,
       })
       .from(schema.backtestDatasets)
       .where(eq(schema.backtestDatasets.userId, ctx.user.id))

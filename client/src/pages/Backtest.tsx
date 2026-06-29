@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   ArrowDown,
@@ -6,10 +6,14 @@ import {
   BarChart2,
   Clock,
   Database,
+  FlaskConical,
   Layers,
+  Loader2,
+  Plus,
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
+import { toast } from "sonner";
 import {
   Area,
   AreaChart,
@@ -25,12 +29,18 @@ import {
 } from "recharts";
 
 import DashboardLayout from "../components/DashboardLayout";
+import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { Separator } from "../components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { cn, formatCurrency, pnlColor } from "../lib/utils";
+import { trpc } from "../lib/trpc";
 
-import { getBacktestDataset } from "../backtest/dataSource";
+import {
+  buildDatasetFromServer,
+  buildSampleSeedTrades,
+  type ServerTradeRow,
+} from "../backtest/dataSource";
 import {
   computeByHour,
   computeBySide,
@@ -40,6 +50,7 @@ import {
   computeRrBuckets,
   computeScaling,
 } from "../backtest/calculations";
+import type { BacktestDataset } from "../backtest/types";
 
 // ---------------------------------------------------------------------------
 // Small primitives — kept local so the Analytics page's StatCard layout stays
@@ -93,18 +104,137 @@ const fmtPct = (n: number) => `${(n * 100).toFixed(1)}%`;
 // Page
 // ---------------------------------------------------------------------------
 
+const SELECTED_DATASET_KEY = "backtest.selectedDatasetId";
+
 export default function Backtest() {
-  const ds = useMemo(() => getBacktestDataset(), []);
-  const core = useMemo(() => computeCoreSummary(ds), [ds]);
-  const byHour = useMemo(() => computeByHour(ds), [ds]);
-  const byTradeNo = useMemo(() => computeByTradeNo(ds), [ds]);
-  const bySide = useMemo(() => computeBySide(ds), [ds]);
-  const rr = useMemo(() => computeRrBuckets(ds), [ds]);
-  const recovery = useMemo(() => computeRecoveryStats(ds), [ds]);
-  const premium = useMemo(() => computeScaling(ds, "premium"), [ds]);
-  const speed = useMemo(() => computeScaling(ds, "speed"), [ds]);
+  const utils = trpc.useUtils();
+  const datasetsQuery = trpc.backtest.dataset.list.useQuery();
+
+  // Restore last-picked dataset from localStorage; fall back to the first
+  // one the server returns. Keep it in sync with the list (drop the stored
+  // id if the dataset was deleted in another tab).
+  const [selectedDatasetId, setSelectedDatasetId] = useState<number | null>(() => {
+    if (typeof window === "undefined") return null;
+    const stored = window.localStorage.getItem(SELECTED_DATASET_KEY);
+    return stored ? Number(stored) : null;
+  });
+
+  const datasets = useMemo(() => datasetsQuery.data ?? [], [datasetsQuery.data]);
+  const activeDatasetId = useMemo<number | null>(() => {
+    if (datasets.length === 0) return null;
+    if (selectedDatasetId && datasets.some((d) => d.id === selectedDatasetId)) {
+      return selectedDatasetId;
+    }
+    return datasets[0].id;
+  }, [datasets, selectedDatasetId]);
+
+  useEffect(() => {
+    if (activeDatasetId == null) {
+      window.localStorage.removeItem(SELECTED_DATASET_KEY);
+    } else {
+      window.localStorage.setItem(SELECTED_DATASET_KEY, String(activeDatasetId));
+    }
+  }, [activeDatasetId]);
+
+  const tradesQuery = trpc.backtest.trade.list.useQuery(
+    { datasetId: activeDatasetId ?? -1 },
+    { enabled: activeDatasetId != null },
+  );
+
+  const activeMeta = useMemo(
+    () => datasets.find((d) => d.id === activeDatasetId) ?? null,
+    [datasets, activeDatasetId],
+  );
+
+  const ds: BacktestDataset | null = useMemo(() => {
+    if (!activeMeta || !tradesQuery.data) return null;
+    return buildDatasetFromServer(
+      activeMeta,
+      tradesQuery.data as unknown as ServerTradeRow[],
+    );
+  }, [activeMeta, tradesQuery.data]);
+
+  // All metric hooks always run; they fall back to zero-state structures
+  // when ds is null so the page can mount safely during loading.
+  const core = useMemo(
+    () => (ds ? computeCoreSummary(ds) : null),
+    [ds],
+  );
+  const byHour = useMemo(() => (ds ? computeByHour(ds) : []), [ds]);
+  const byTradeNo = useMemo(() => (ds ? computeByTradeNo(ds) : []), [ds]);
+  const bySide = useMemo(() => (ds ? computeBySide(ds) : []), [ds]);
+  const rr = useMemo(() => (ds ? computeRrBuckets(ds) : []), [ds]);
+  const recovery = useMemo(
+    () =>
+      ds
+        ? computeRecoveryStats(ds)
+        : {
+            firstCount: 0,
+            firstWins: 0,
+            firstWinRate: 0,
+            secondCount: 0,
+            secondWins: 0,
+            secondWinRate: 0,
+            totalCount: 0,
+            totalWins: 0,
+            totalWinRate: 0,
+          },
+    [ds],
+  );
+  const premium = useMemo(
+    () =>
+      ds
+        ? computeScaling(ds, "premium")
+        : { start: 0, end: 0, netPnl: 0, trades: 0, maxBalance: 0, minBalance: 0, maxDrawdown: 0, maxDrawdownPercent: 0, milestones: 0, points: [] },
+    [ds],
+  );
+  const speed = useMemo(
+    () =>
+      ds
+        ? computeScaling(ds, "speed")
+        : { start: 0, end: 0, netPnl: 0, trades: 0, maxBalance: 0, minBalance: 0, maxDrawdown: 0, maxDrawdownPercent: 0, milestones: 0, points: [] },
+    [ds],
+  );
 
   const [tab, setTab] = useState<"overview" | "timing" | "scaling" | "log">("overview");
+
+  // Dataset-create mutation, shared by both empty-state buttons.
+  const createDataset = trpc.backtest.dataset.create.useMutation({
+    onSuccess: (created) => {
+      setSelectedDatasetId(created.id);
+      utils.backtest.dataset.list.invalidate();
+      toast.success(`Created "${created.name}"`);
+    },
+    onError: (err) => {
+      toast.error(err.message ?? "Failed to create dataset");
+    },
+  });
+
+  function handleLoadSample() {
+    const seedTrades = buildSampleSeedTrades();
+    createDataset.mutate({
+      name: "MNQ Inverse Renko20 (sample)",
+      brickPoints: 20,
+      stopBricks: 8,
+      takeProfitBricks: 2,
+      seedTrades,
+    });
+  }
+
+  function handleCreateBlank() {
+    const name = window.prompt("Name this dataset", "New backtest");
+    if (!name) return;
+    createDataset.mutate({
+      name: name.trim(),
+      brickPoints: 20,
+      stopBricks: 8,
+      takeProfitBricks: 2,
+    });
+  }
+
+  const isLoading = datasetsQuery.isLoading;
+  const isEmpty = !isLoading && datasets.length === 0;
+  const isTradesLoading = activeDatasetId != null && tradesQuery.isLoading;
 
   return (
     <DashboardLayout>
@@ -117,53 +247,167 @@ export default function Backtest() {
               Strategy validation and scenario analysis — separate from your live journal.
             </p>
           </div>
-          <div className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-2 text-xs">
-            <Database className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-muted-foreground">Dataset:</span>
-            <span className="font-medium text-foreground">{ds.name}</span>
-            <span className="text-muted-foreground">·</span>
-            <span className="text-foreground">{core.validTrades} valid trades</span>
-          </div>
+          {datasets.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <DatasetSelector
+                datasets={datasets}
+                activeId={activeDatasetId}
+                onChange={setSelectedDatasetId}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCreateBlank}
+                disabled={createDataset.isPending}
+                className="gap-1.5"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                New dataset
+              </Button>
+            </div>
+          )}
         </div>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
-          <TabsList className="bg-card/60">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="timing">Timing / Sequence</TabsTrigger>
-            <TabsTrigger value="scaling">Scaling</TabsTrigger>
-            <TabsTrigger value="log">Trade Log</TabsTrigger>
-          </TabsList>
+        {/* Loading the dataset list itself */}
+        {isLoading && (
+          <div className="flex items-center justify-center py-24">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        )}
 
-          <TabsContent value="overview" className="space-y-6 mt-6">
-            <OverviewTab
-              core={core}
-              recovery={recovery}
-              premium={premium}
-              speed={speed}
-            />
-          </TabsContent>
+        {/* No datasets yet — empty state */}
+        {isEmpty && (
+          <EmptyState
+            onLoadSample={handleLoadSample}
+            onCreateBlank={handleCreateBlank}
+            isPending={createDataset.isPending}
+          />
+        )}
 
-          <TabsContent value="timing" className="space-y-6 mt-6">
-            <TimingTab
-              byHour={byHour}
-              byTradeNo={byTradeNo}
-              bySide={bySide}
-              rr={rr}
-              recovery={recovery}
-              stopPoints={ds.stopBricks * ds.brickPoints}
-            />
-          </TabsContent>
+        {/* Have datasets but trades for the active one are loading */}
+        {!isLoading && !isEmpty && isTradesLoading && (
+          <div className="flex items-center justify-center py-24">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        )}
 
-          <TabsContent value="scaling" className="space-y-6 mt-6">
-            <ScalingTab premium={premium} speed={speed} />
-          </TabsContent>
+        {/* Ready to render */}
+        {ds && core && (
+          <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
+            <TabsList className="bg-card/60">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="timing">Timing / Sequence</TabsTrigger>
+              <TabsTrigger value="scaling">Scaling</TabsTrigger>
+              <TabsTrigger value="log">Trade Log</TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="log" className="space-y-6 mt-6">
-            <TradeLogTab dataset={ds} />
-          </TabsContent>
-        </Tabs>
+            <TabsContent value="overview" className="space-y-6 mt-6">
+              <OverviewTab
+                core={core}
+                recovery={recovery}
+                premium={premium}
+                speed={speed}
+              />
+            </TabsContent>
+
+            <TabsContent value="timing" className="space-y-6 mt-6">
+              <TimingTab
+                byHour={byHour}
+                byTradeNo={byTradeNo}
+                bySide={bySide}
+                rr={rr}
+                recovery={recovery}
+                stopPoints={ds.stopBricks * ds.brickPoints}
+              />
+            </TabsContent>
+
+            <TabsContent value="scaling" className="space-y-6 mt-6">
+              <ScalingTab premium={premium} speed={speed} />
+            </TabsContent>
+
+            <TabsContent value="log" className="space-y-6 mt-6">
+              <TradeLogTab dataset={ds} />
+            </TabsContent>
+          </Tabs>
+        )}
       </div>
     </DashboardLayout>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Empty state — first-visit experience with two seeding paths.
+// ---------------------------------------------------------------------------
+
+function EmptyState({
+  onLoadSample,
+  onCreateBlank,
+  isPending,
+}: {
+  onLoadSample: () => void;
+  onCreateBlank: () => void;
+  isPending: boolean;
+}) {
+  return (
+    <div className="rounded-xl border border-dashed border-border bg-card/40 p-10 text-center">
+      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/15">
+        <FlaskConical className="h-6 w-6 text-primary" />
+      </div>
+      <h2 className="text-lg font-semibold">No backtests yet</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Start with the bundled MNQ Inverse Renko20 sample (404 trades) or
+        create an empty dataset and add trades by hand.
+      </p>
+      <div className="mt-6 flex flex-wrap justify-center gap-2">
+        <Button onClick={onLoadSample} disabled={isPending} className="gap-1.5">
+          {isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Database className="h-4 w-4" />
+          )}
+          Load MNQ sample
+        </Button>
+        <Button
+          variant="outline"
+          onClick={onCreateBlank}
+          disabled={isPending}
+          className="gap-1.5"
+        >
+          <Plus className="h-4 w-4" />
+          Create blank
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Dataset selector — simple dropdown of the user's datasets.
+// ---------------------------------------------------------------------------
+
+interface DatasetSelectorProps {
+  datasets: Array<{ id: number; name: string; tradeCount: number }>;
+  activeId: number | null;
+  onChange: (id: number) => void;
+}
+
+function DatasetSelector({ datasets, activeId, onChange }: DatasetSelectorProps) {
+  return (
+    <label className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-2 text-xs">
+      <Database className="h-3.5 w-3.5 text-muted-foreground" />
+      <span className="text-muted-foreground">Dataset</span>
+      <select
+        className="bg-transparent text-sm font-medium text-foreground focus:outline-none"
+        value={activeId ?? ""}
+        onChange={(e) => onChange(Number(e.target.value))}
+      >
+        {datasets.map((d) => (
+          <option key={d.id} value={d.id} className="bg-zinc-900 text-foreground">
+            {d.name} ({d.tradeCount})
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -858,7 +1102,7 @@ function MilestoneTable({
 type SideFilter = "all" | "LONG" | "SHORT";
 type OutcomeFilter = "all" | "Took Profit" | "Took Loss";
 
-function TradeLogTab({ dataset }: { dataset: ReturnType<typeof getBacktestDataset> }) {
+function TradeLogTab({ dataset }: { dataset: BacktestDataset }) {
   const [side, setSide] = useState<SideFilter>("all");
   const [outcome, setOutcome] = useState<OutcomeFilter>("all");
   const [recovery, setRecovery] = useState<"all" | "yes" | "no">("all");
