@@ -41,6 +41,18 @@ import {
   buildSampleSeedTrades,
   type ServerTradeRow,
 } from "../backtest/dataSource";
+import { TradeFormModal } from "../backtest/TradeFormModal";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../components/ui/alert-dialog";
+import { Pencil, Trash2 } from "lucide-react";
 import {
   computeByHour,
   computeBySide,
@@ -1103,11 +1115,31 @@ type SideFilter = "all" | "LONG" | "SHORT";
 type OutcomeFilter = "all" | "Took Profit" | "Took Loss";
 
 function TradeLogTab({ dataset }: { dataset: BacktestDataset }) {
+  // buildDatasetFromServer stashes the dataset id; the modal mutations need it.
+  const datasetId = dataset.id;
+
   const [side, setSide] = useState<SideFilter>("all");
   const [outcome, setOutcome] = useState<OutcomeFilter>("all");
   const [recovery, setRecovery] = useState<"all" | "yes" | "no">("all");
   const [page, setPage] = useState(0);
   const pageSize = 50;
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingTrade, setEditingTrade] = useState<typeof dataset.trades[number] | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<typeof dataset.trades[number] | null>(null);
+
+  const utils = trpc.useUtils();
+  const deleteMutation = trpc.backtest.trade.delete.useMutation({
+    onSuccess: () => {
+      if (datasetId != null) {
+        utils.backtest.trade.list.invalidate({ datasetId });
+      }
+      utils.backtest.dataset.list.invalidate();
+      toast.success("Trade deleted");
+      setPendingDelete(null);
+    },
+    onError: (err) => toast.error(err.message ?? "Failed to delete trade"),
+  });
 
   const rows = useMemo(() => {
     return dataset.trades.filter((t) => {
@@ -1169,6 +1201,19 @@ function TradeLogTab({ dataset }: { dataset: BacktestDataset }) {
         <span className="ml-auto text-xs text-muted-foreground">
           {rows.length.toLocaleString()} rows · page {page + 1} of {pageCount}
         </span>
+        {datasetId != null && (
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditingTrade(null);
+              setModalOpen(true);
+            }}
+            className="gap-1.5"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add trade
+          </Button>
+        )}
       </div>
 
       <Card className="bg-card/60">
@@ -1188,11 +1233,12 @@ function TradeLogTab({ dataset }: { dataset: BacktestDataset }) {
                   <th className="px-3 py-2 text-left">Recovery</th>
                   <th className="px-3 py-2 text-right">Premium $</th>
                   <th className="px-3 py-2 text-right">Speed $</th>
+                  <th className="px-3 py-2 text-right w-20">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {visible.map((t) => (
-                  <tr key={t.index} className="border-t border-border/40 hover:bg-accent/20">
+                  <tr key={t.index} className="group border-t border-border/40 hover:bg-accent/20">
                     <td className="px-3 py-2 text-xs text-muted-foreground">{t.index + 1}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       {t.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
@@ -1242,6 +1288,33 @@ function TradeLogTab({ dataset }: { dataset: BacktestDataset }) {
                     <td className={cn("px-3 py-2 text-right tabular-nums", pnlColor(t.speed?.pnl))}>
                       {t.speed ? formatCurrency(t.speed.pnl) : "—"}
                     </td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        {t.id != null && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingTrade(t);
+                                setModalOpen(true);
+                              }}
+                              title="Edit trade"
+                              className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPendingDelete(t)}
+                              title="Delete trade"
+                              className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive-foreground"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1271,6 +1344,62 @@ function TradeLogTab({ dataset }: { dataset: BacktestDataset }) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Add / Edit modal */}
+      {datasetId != null && (
+        <TradeFormModal
+          open={modalOpen}
+          onOpenChange={(o) => {
+            setModalOpen(o);
+            if (!o) setEditingTrade(null);
+          }}
+          datasetId={datasetId}
+          editingTrade={editingTrade}
+        />
+      )}
+
+      {/* Delete confirmation */}
+      <AlertDialog
+        open={pendingDelete != null}
+        onOpenChange={(o) => !o && setPendingDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this trade?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete && (
+                <>
+                  {pendingDelete.date.toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}{" "}
+                  · {pendingDelete.side} · T{pendingDelete.tradeNo} ·{" "}
+                  {pendingDelete.outcome ?? "open"}
+                  <br />
+                  This can't be undone — metrics on every tab will recompute.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteMutation.isPending}
+              onClick={() => {
+                if (pendingDelete?.id != null) {
+                  deleteMutation.mutate({ id: pendingDelete.id });
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteMutation.isPending ? "Deleting…" : "Delete trade"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

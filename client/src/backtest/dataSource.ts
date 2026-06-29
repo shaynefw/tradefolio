@@ -163,6 +163,7 @@ export function buildDatasetFromServer(
   rows: ServerTradeRow[],
 ): BacktestDataset {
   return {
+    id: meta.id,
     name: meta.name,
     source: "upload",
     brickPoints: meta.brickPoints,

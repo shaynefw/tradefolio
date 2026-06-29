@@ -44,6 +44,7 @@ export interface BacktestTrade {
 }
 
 export interface BacktestDataset {
+  id?: number;           // server id; undefined when built from a bundled CSV
   name: string;          // e.g. "MNQ Inverse Renko20 (sample)"
   source: "sample" | "upload";
   brickPoints: number;   // points per brick; 20 for this dataset
