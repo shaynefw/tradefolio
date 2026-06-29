@@ -30,11 +30,11 @@ interface FormState {
   mfe: string;
   recoveryStage: RecoveryStage;
   premiumPnl: string;
-  premiumBalance: string;
   premiumLabel: string;
+  premiumResetBalance: string;
   speedPnl: string;
-  speedBalance: string;
   speedLabel: string;
+  speedResetBalance: string;
   notes: string;
 }
 
@@ -59,11 +59,11 @@ const EMPTY_FORM: FormState = {
   mfe: "",
   recoveryStage: "none",
   premiumPnl: "",
-  premiumBalance: "",
   premiumLabel: "",
+  premiumResetBalance: "",
   speedPnl: "",
-  speedBalance: "",
   speedLabel: "",
+  speedResetBalance: "",
   notes: "",
 };
 
@@ -79,11 +79,13 @@ function tradeToForm(t: BacktestTrade): FormState {
     mfe: t.mfe == null ? "" : String(t.mfe),
     recoveryStage: t.recoveryStage,
     premiumPnl: t.premium?.pnl == null ? "" : String(t.premium.pnl),
-    premiumBalance: t.premium?.balance == null ? "" : String(t.premium.balance),
     premiumLabel: t.premium?.label ?? "",
+    premiumResetBalance:
+      t.premiumResetBalance == null ? "" : String(t.premiumResetBalance),
     speedPnl: t.speed?.pnl == null ? "" : String(t.speed.pnl),
-    speedBalance: t.speed?.balance == null ? "" : String(t.speed.balance),
     speedLabel: t.speed?.label ?? "",
+    speedResetBalance:
+      t.speedResetBalance == null ? "" : String(t.speedResetBalance),
     notes: "",
   };
 }
@@ -129,7 +131,13 @@ export function TradeFormModal({
   useEffect(() => {
     if (!open) return;
     setForm(editingTrade ? tradeToForm(editingTrade) : EMPTY_FORM);
-    setShowAdvanced(!!editingTrade && (editingTrade.premium != null || editingTrade.speed != null));
+    setShowAdvanced(
+      !!editingTrade &&
+        (editingTrade.premium != null ||
+          editingTrade.speed != null ||
+          editingTrade.premiumResetBalance != null ||
+          editingTrade.speedResetBalance != null),
+    );
   }, [open, editingTrade]);
 
   const utils = trpc.useUtils();
@@ -179,11 +187,13 @@ export function TradeFormModal({
       mfe: num(form.mfe),
       recoveryStage: form.recoveryStage,
       premiumPnl: num(form.premiumPnl),
-      premiumBalance: num(form.premiumBalance),
+      premiumBalance: null, // auto-computed from start + Σ pnl
       premiumLabel: str(form.premiumLabel),
+      premiumResetBalance: num(form.premiumResetBalance),
       speedPnl: num(form.speedPnl),
-      speedBalance: num(form.speedBalance),
+      speedBalance: null, // auto-computed
       speedLabel: str(form.speedLabel),
+      speedResetBalance: num(form.speedResetBalance),
       notes: str(form.notes),
     };
 
@@ -342,69 +352,82 @@ export function TradeFormModal({
               {showAdvanced ? "Hide" : "Show"} scaling fields (Premium / Speed)
             </button>
             {showAdvanced && (
-              <div className="mt-3 grid grid-cols-1 gap-3 rounded-md border border-border bg-card/40 p-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                    Premium
-                  </p>
-                  <Field label="PnL">
-                    <input
-                      type="number"
-                      step="any"
-                      value={form.premiumPnl}
-                      onChange={(e) => setForm((f) => ({ ...f, premiumPnl: e.target.value }))}
-                      className={inputClass}
-                    />
-                  </Field>
-                  <Field label="Balance">
-                    <input
-                      type="number"
-                      step="any"
-                      value={form.premiumBalance}
-                      onChange={(e) => setForm((f) => ({ ...f, premiumBalance: e.target.value }))}
-                      className={inputClass}
-                    />
-                  </Field>
-                  <Field label="Label">
-                    <input
-                      type="text"
-                      placeholder="e.g. lossA, Art1c"
-                      value={form.premiumLabel}
-                      onChange={(e) => setForm((f) => ({ ...f, premiumLabel: e.target.value }))}
-                      className={inputClass}
-                    />
-                  </Field>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                    Speed
-                  </p>
-                  <Field label="PnL">
-                    <input
-                      type="number"
-                      step="any"
-                      value={form.speedPnl}
-                      onChange={(e) => setForm((f) => ({ ...f, speedPnl: e.target.value }))}
-                      className={inputClass}
-                    />
-                  </Field>
-                  <Field label="Balance">
-                    <input
-                      type="number"
-                      step="any"
-                      value={form.speedBalance}
-                      onChange={(e) => setForm((f) => ({ ...f, speedBalance: e.target.value }))}
-                      className={inputClass}
-                    />
-                  </Field>
-                  <Field label="Label">
-                    <input
-                      type="text"
-                      value={form.speedLabel}
-                      onChange={(e) => setForm((f) => ({ ...f, speedLabel: e.target.value }))}
-                      className={inputClass}
-                    />
-                  </Field>
+              <div className="mt-3 space-y-3 rounded-md border border-border bg-card/40 p-3">
+                <p className="text-xs text-muted-foreground">
+                  Balance is computed automatically from the dataset's starting
+                  balance plus the sum of all trade PnLs. Use{" "}
+                  <span className="font-medium text-foreground">
+                    Reset balance
+                  </span>{" "}
+                  to declare a new starting point after this trade — typically
+                  after the account blew.
+                </p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                      Premium
+                    </p>
+                    <Field label="PnL">
+                      <input
+                        type="number"
+                        step="any"
+                        value={form.premiumPnl}
+                        onChange={(e) => setForm((f) => ({ ...f, premiumPnl: e.target.value }))}
+                        className={inputClass}
+                      />
+                    </Field>
+                    <Field label="Label">
+                      <input
+                        type="text"
+                        placeholder="e.g. lossA, Art1c"
+                        value={form.premiumLabel}
+                        onChange={(e) => setForm((f) => ({ ...f, premiumLabel: e.target.value }))}
+                        className={inputClass}
+                      />
+                    </Field>
+                    <Field label="Reset balance to">
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="blank = no reset"
+                        value={form.premiumResetBalance}
+                        onChange={(e) => setForm((f) => ({ ...f, premiumResetBalance: e.target.value }))}
+                        className={inputClass}
+                      />
+                    </Field>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                      Speed
+                    </p>
+                    <Field label="PnL">
+                      <input
+                        type="number"
+                        step="any"
+                        value={form.speedPnl}
+                        onChange={(e) => setForm((f) => ({ ...f, speedPnl: e.target.value }))}
+                        className={inputClass}
+                      />
+                    </Field>
+                    <Field label="Label">
+                      <input
+                        type="text"
+                        value={form.speedLabel}
+                        onChange={(e) => setForm((f) => ({ ...f, speedLabel: e.target.value }))}
+                        className={inputClass}
+                      />
+                    </Field>
+                    <Field label="Reset balance to">
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="blank = no reset"
+                        value={form.speedResetBalance}
+                        onChange={(e) => setForm((f) => ({ ...f, speedResetBalance: e.target.value }))}
+                        className={inputClass}
+                      />
+                    </Field>
+                  </div>
                 </div>
               </div>
             )}

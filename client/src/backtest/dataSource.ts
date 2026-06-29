@@ -34,14 +34,24 @@ export interface SeedTradeInput {
   premiumPnl: number | null;
   premiumBalance: number | null;
   premiumLabel: string | null;
+  premiumResetBalance: number | null;
   speedPnl: number | null;
   speedBalance: number | null;
   speedLabel: string | null;
+  speedResetBalance: number | null;
   notes: string | null;
 }
 
-// Parse the bundled MNQ CSV into seed payloads ready for dataset.create.
-export function buildSampleSeedTrades(): SeedTradeInput[] {
+export interface SampleSeed {
+  premiumStartBalance: number | null;
+  speedStartBalance: number | null;
+  trades: SeedTradeInput[];
+}
+
+// Parse the bundled MNQ CSV into seed payloads ready for dataset.create —
+// including the inferred starting balances so the new dataset is immediately
+// ready to render its scaling charts.
+export function buildSampleSeed(): SampleSeed {
   const parsed = parseBacktestCsv(sampleCsv, {
     name: "MNQ Inverse Renko20",
     source: "sample",
@@ -49,24 +59,30 @@ export function buildSampleSeedTrades(): SeedTradeInput[] {
     stopBricks: 8,
     takeProfitBricks: 2,
   });
-  return parsed.trades.map((t) => ({
-    date: t.date.getTime(),
-    time: t.time,
-    side: t.side,
-    tradeNo: t.tradeNo,
-    validEntry: t.validEntry,
-    outcome: t.outcome,
-    mae: t.mae,
-    mfe: t.mfe,
-    recoveryStage: t.recoveryStage,
-    premiumPnl: t.premium?.pnl ?? null,
-    premiumBalance: t.premium?.balance ?? null,
-    premiumLabel: t.premium?.label ?? null,
-    speedPnl: t.speed?.pnl ?? null,
-    speedBalance: t.speed?.balance ?? null,
-    speedLabel: t.speed?.label ?? null,
-    notes: null,
-  }));
+  return {
+    premiumStartBalance: parsed.premiumStartBalance,
+    speedStartBalance: parsed.speedStartBalance,
+    trades: parsed.trades.map((t) => ({
+      date: t.date.getTime(),
+      time: t.time,
+      side: t.side,
+      tradeNo: t.tradeNo,
+      validEntry: t.validEntry,
+      outcome: t.outcome,
+      mae: t.mae,
+      mfe: t.mfe,
+      recoveryStage: t.recoveryStage,
+      premiumPnl: t.premium?.pnl ?? null,
+      premiumBalance: t.premium?.balance ?? null,
+      premiumLabel: t.premium?.label ?? null,
+      premiumResetBalance: null,
+      speedPnl: t.speed?.pnl ?? null,
+      speedBalance: t.speed?.balance ?? null,
+      speedLabel: t.speed?.label ?? null,
+      speedResetBalance: null,
+      notes: null,
+    })),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -81,6 +97,8 @@ export interface ServerDatasetMeta {
   brickPoints: number;
   stopBricks: number;
   takeProfitBricks: number;
+  premiumStartBalance: number | null;
+  speedStartBalance: number | null;
 }
 
 // What backtest.trade.list returns per row.
@@ -100,9 +118,11 @@ export interface ServerTradeRow {
   premiumPnl: number | null;
   premiumBalance: number | null;
   premiumLabel: string | null;
+  premiumResetBalance: number | null;
   speedPnl: number | null;
   speedBalance: number | null;
   speedLabel: string | null;
+  speedResetBalance: number | null;
   notes: string | null;
 }
 
@@ -138,21 +158,27 @@ export function serverRowToBacktestTrade(
     mfe: row.mfe,
     recoveryStage: row.recoveryStage,
     premium:
-      row.premiumBalance != null
+      // Even with no stored balance, a non-zero pnl still belongs to a
+      // scaling row so the running-balance compute can pick it up. We
+      // synthesize a balance=0 placeholder; the new computeScaling derives
+      // the real balance from start + cumulative pnl.
+      row.premiumPnl != null || row.premiumBalance != null
         ? {
             pnl: row.premiumPnl ?? 0,
-            balance: row.premiumBalance,
+            balance: row.premiumBalance ?? 0,
             label: row.premiumLabel,
           }
         : null,
     speed:
-      row.speedBalance != null
+      row.speedPnl != null || row.speedBalance != null
         ? {
             pnl: row.speedPnl ?? 0,
-            balance: row.speedBalance,
+            balance: row.speedBalance ?? 0,
             label: row.speedLabel,
           }
         : null,
+    premiumResetBalance: row.premiumResetBalance,
+    speedResetBalance: row.speedResetBalance,
     winStreakAt: null,
     lossStreakAt: null,
   };
@@ -169,6 +195,8 @@ export function buildDatasetFromServer(
     brickPoints: meta.brickPoints,
     stopBricks: meta.stopBricks,
     takeProfitBricks: meta.takeProfitBricks,
+    premiumStartBalance: meta.premiumStartBalance,
+    speedStartBalance: meta.speedStartBalance,
     trades: rows.map(serverRowToBacktestTrade),
   };
 }

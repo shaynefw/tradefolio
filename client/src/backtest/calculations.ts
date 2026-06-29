@@ -346,21 +346,32 @@ export function computeRecoveryStats(ds: BacktestDataset): RecoveryStats {
 
 // ---------------------------------------------------------------------------
 // Scaling progressions — drive the Premium/Speed charts and balance tables.
-// We trust the source spreadsheet's per-row balance value when present rather
-// than re-deriving from PnL (the source uses non-uniform sizing late in the
-// dataset, which we want to preserve).
+//
+// Each ScalingSeries walks the trades from the dataset's startBalance,
+// applying each trade's pnl. When a trade carries a manual resetBalance, the
+// running balance jumps to that value before applying pnl — used by the user
+// to recover from a blown account. A "blow" is the first trade whose post-pnl
+// balance hits ≤ 0; the series records it so the UI can highlight it.
 // ---------------------------------------------------------------------------
 
 export interface ScalingPoint {
   index: number;       // ordinal in the scaling sequence (1-based for display)
   date: string;        // "Feb 27" — for x-axis ticks
-  balance: number;
+  balance: number;     // computed running balance after this trade
   pnl: number;
   label: string | null;
   isMilestone: boolean; // true when label is set
+  isReset: boolean;     // true when this trade carried a manual balance reset
+}
+
+export interface BlowEvent {
+  index: number;       // 1-based scaling-sequence position
+  date: string;        // formatted date label
+  balance: number;     // post-pnl balance at the blow point (≤ 0)
 }
 
 export interface ScalingSeries {
+  tracked: boolean;       // true when startBalance is set on the dataset
   start: number;
   end: number;
   netPnl: number;
@@ -370,53 +381,103 @@ export interface ScalingSeries {
   maxDrawdown: number;       // peak − trough in dollars
   maxDrawdownPercent: number; // % of peak
   milestones: number;        // count of labeled events
+  resetCount: number;        // manual balance resets in this series
+  firstBlow: BlowEvent | null;
+  blows: BlowEvent[];        // all blow events (rare; typically 0 or 1)
   points: ScalingPoint[];
 }
 
 const MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const formatShort = (d: Date) => `${MONTH[d.getMonth()]} ${d.getDate()}`;
 
+function emptySeries(tracked: boolean, start: number): ScalingSeries {
+  return {
+    tracked,
+    start,
+    end: start,
+    netPnl: 0,
+    trades: 0,
+    maxBalance: start,
+    minBalance: start,
+    maxDrawdown: 0,
+    maxDrawdownPercent: 0,
+    milestones: 0,
+    resetCount: 0,
+    firstBlow: null,
+    blows: [],
+    points: [],
+  };
+}
+
 export function computeScaling(
   ds: BacktestDataset,
   which: "premium" | "speed",
 ): ScalingSeries {
+  const startBalance =
+    which === "premium" ? ds.premiumStartBalance : ds.speedStartBalance;
+  if (startBalance == null) {
+    return emptySeries(false, 0);
+  }
+
   const points: ScalingPoint[] = [];
+  const blows: BlowEvent[] = [];
+  let balance = startBalance;
   let netPnl = 0;
-  let start = 0;
   let i = 1;
+  let resetCount = 0;
+  // "Blown" is sticky until either a reset or a new high above 0 resets it.
+  // We require a reset to clear it so an account that recovers from a tiny
+  // overshoot still shows a single blow marker — that matches how a trader
+  // would think about it.
+  let blownSticky = false;
+
   for (const t of ds.trades) {
-    const row = which === "premium" ? t.premium : t.speed;
-    if (!row) continue;
-    if (start === 0) start = row.balance - row.pnl;
-    netPnl += row.pnl;
+    const reset =
+      which === "premium" ? t.premiumResetBalance : t.speedResetBalance;
+    const scaling = which === "premium" ? t.premium : t.speed;
+    const pnl = scaling?.pnl ?? 0;
+    const label = scaling?.label ?? null;
+
+    const isReset = reset != null;
+    if (isReset) {
+      // Reset declares "the running balance after this trade is exactly X"
+      // — the trade's PnL is still recorded for stats but doesn't move the
+      // balance. This matches the "I blew up, here's my new starting point"
+      // mental model.
+      balance = reset;
+      blownSticky = balance <= 0;
+      resetCount++;
+    } else {
+      balance += pnl;
+      if (!blownSticky && balance <= 0) {
+        blows.push({
+          index: i,
+          date: formatShort(t.date),
+          balance,
+        });
+        blownSticky = true;
+      }
+    }
+    netPnl += pnl;
+
     points.push({
       index: i++,
       date: formatShort(t.date),
-      balance: row.balance,
-      pnl: row.pnl,
-      label: row.label,
-      isMilestone: row.label != null,
+      balance,
+      pnl,
+      label,
+      isMilestone: label != null,
+      isReset,
     });
   }
 
   if (points.length === 0) {
-    return {
-      start: 0,
-      end: 0,
-      netPnl: 0,
-      trades: 0,
-      maxBalance: 0,
-      minBalance: 0,
-      maxDrawdown: 0,
-      maxDrawdownPercent: 0,
-      milestones: 0,
-      points,
-    };
+    return emptySeries(true, startBalance);
   }
 
   let maxBalance = -Infinity;
   let minBalance = Infinity;
-  let peak = -Infinity;
+  let peak = startBalance;
   let maxDd = 0;
   let maxDdPct = 0;
   for (const p of points) {
@@ -430,10 +491,9 @@ export function computeScaling(
     }
   }
 
-  const milestones = points.filter((p) => p.isMilestone).length;
-
   return {
-    start,
+    tracked: true,
+    start: startBalance,
     end: points[points.length - 1].balance,
     netPnl,
     trades: points.length,
@@ -441,7 +501,10 @@ export function computeScaling(
     minBalance,
     maxDrawdown: maxDd,
     maxDrawdownPercent: maxDdPct,
-    milestones,
+    milestones: points.filter((p) => p.isMilestone).length,
+    resetCount,
+    firstBlow: blows[0] ?? null,
+    blows,
     points,
   };
 }

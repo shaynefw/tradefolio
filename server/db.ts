@@ -129,6 +129,36 @@ export async function initDb() {
   for (const sql of statements) {
     await client.execute(sql);
   }
+
+  // Idempotent ALTER TABLE additions for columns introduced after the
+  // original CREATE TABLE statements. SQLite ALTER TABLE doesn't support
+  // IF NOT EXISTS until 3.35, so check via PRAGMA table_info first.
+  await addColumnIfMissing(
+    "backtest_datasets",
+    "premium_start_balance",
+    "REAL",
+  );
+  await addColumnIfMissing("backtest_datasets", "speed_start_balance", "REAL");
+  await addColumnIfMissing(
+    "backtest_trades",
+    "premium_reset_balance",
+    "REAL",
+  );
+  await addColumnIfMissing("backtest_trades", "speed_reset_balance", "REAL");
+}
+
+async function addColumnIfMissing(
+  table: string,
+  column: string,
+  definition: string,
+) {
+  const result = await client.execute(`PRAGMA table_info(${table})`);
+  const exists = result.rows.some((row) => row.name === column);
+  if (!exists) {
+    await client.execute(
+      `ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`,
+    );
+  }
 }
 
 export { schema };

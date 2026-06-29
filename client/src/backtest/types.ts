@@ -37,6 +37,11 @@ export interface BacktestTrade {
   recoveryStage: RecoveryStage; // parsed from the spreadsheet's recovery col
   premium: ScalingRow | null;
   speed: ScalingRow | null;
+  // Per-trade manual balance reset for each scaling. Non-null means the
+  // running-balance computation jumps to this value before applying this
+  // trade's pnl — used by the user to recover from a blown account.
+  premiumResetBalance: number | null;
+  speedResetBalance: number | null;
   // running streak counters as written by the source spreadsheet; only valid
   // for "YES" trades. Kept so we can prefer source-of-truth over recompute.
   winStreakAt: number | null;
@@ -50,5 +55,10 @@ export interface BacktestDataset {
   brickPoints: number;   // points per brick; 20 for this dataset
   stopBricks: number;    // 8 = 160 points
   takeProfitBricks: number; // 2 = 40 points
+  // Optional starting balances for each scaling. When set, the Scaling tab
+  // walks trades from this base, applying each trade's pnl. null = the
+  // scaling isn't being tracked for this dataset.
+  premiumStartBalance: number | null;
+  speedStartBalance: number | null;
   trades: BacktestTrade[];
 }

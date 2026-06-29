@@ -180,6 +180,8 @@ function rowToTrade(row: string[], index: number): BacktestTrade | null {
     recoveryStage,
     premium,
     speed,
+    premiumResetBalance: null,
+    speedResetBalance: null,
     winStreakAt,
     lossStreakAt,
   };
@@ -214,12 +216,26 @@ export function parseBacktestCsv(
     }
   }
 
+  // Derive starting balances from the first trade that has a balance
+  // recorded in the source CSV. This gives the "Load MNQ sample" path a
+  // sensible default ($10k / $3k) without the user having to enter it.
+  const firstPremium = trades.find((t) => t.premium != null)?.premium;
+  const firstSpeed = trades.find((t) => t.speed != null)?.speed;
+  const premiumStartBalance = firstPremium
+    ? firstPremium.balance - firstPremium.pnl
+    : null;
+  const speedStartBalance = firstSpeed
+    ? firstSpeed.balance - firstSpeed.pnl
+    : null;
+
   return {
     name: opts.name ?? "MNQ Inverse Renko20 (sample)",
     source: opts.source ?? "sample",
     brickPoints: opts.brickPoints ?? 20,
     stopBricks: opts.stopBricks ?? 8,
     takeProfitBricks: opts.takeProfitBricks ?? 2,
+    premiumStartBalance,
+    speedStartBalance,
     trades,
   };
 }

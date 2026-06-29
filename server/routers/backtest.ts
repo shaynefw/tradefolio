@@ -30,9 +30,11 @@ const tradeInputShape = {
   premiumPnl: z.number().nullable().optional(),
   premiumBalance: z.number().nullable().optional(),
   premiumLabel: z.string().nullable().optional(),
+  premiumResetBalance: z.number().nullable().optional(),
   speedPnl: z.number().nullable().optional(),
   speedBalance: z.number().nullable().optional(),
   speedLabel: z.string().nullable().optional(),
+  speedResetBalance: z.number().nullable().optional(),
   notes: z.string().nullable().optional(),
 };
 
@@ -50,9 +52,11 @@ const tradePatchInput = z.object({
   premiumPnl: z.number().nullable().optional(),
   premiumBalance: z.number().nullable().optional(),
   premiumLabel: z.string().nullable().optional(),
+  premiumResetBalance: z.number().nullable().optional(),
   speedPnl: z.number().nullable().optional(),
   speedBalance: z.number().nullable().optional(),
   speedLabel: z.string().nullable().optional(),
+  speedResetBalance: z.number().nullable().optional(),
   notes: z.string().nullable().optional(),
 });
 
@@ -98,6 +102,8 @@ const datasetRouter = router({
         brickPoints: schema.backtestDatasets.brickPoints,
         stopBricks: schema.backtestDatasets.stopBricks,
         takeProfitBricks: schema.backtestDatasets.takeProfitBricks,
+        premiumStartBalance: schema.backtestDatasets.premiumStartBalance,
+        speedStartBalance: schema.backtestDatasets.speedStartBalance,
         createdAt: schema.backtestDatasets.createdAt,
         updatedAt: schema.backtestDatasets.updatedAt,
         // Subquery counted via raw SQL — drizzle's sql template wasn't
@@ -117,6 +123,8 @@ const datasetRouter = router({
         brickPoints: z.number().int().positive().default(20),
         stopBricks: z.number().int().positive().default(8),
         takeProfitBricks: z.number().int().positive().default(2),
+        premiumStartBalance: z.number().nullable().optional(),
+        speedStartBalance: z.number().nullable().optional(),
         // Optional seed trades — used by "Load MNQ sample" flow. The whole
         // create-and-seed runs in one transaction so partial failures don't
         // leave an empty dataset around.
@@ -133,6 +141,8 @@ const datasetRouter = router({
             brickPoints: input.brickPoints,
             stopBricks: input.stopBricks,
             takeProfitBricks: input.takeProfitBricks,
+            premiumStartBalance: input.premiumStartBalance ?? null,
+            speedStartBalance: input.speedStartBalance ?? null,
           })
           .returning();
         if (input.seedTrades && input.seedTrades.length > 0) {
@@ -155,6 +165,8 @@ const datasetRouter = router({
         brickPoints: z.number().int().positive().optional(),
         stopBricks: z.number().int().positive().optional(),
         takeProfitBricks: z.number().int().positive().optional(),
+        premiumStartBalance: z.number().nullable().optional(),
+        speedStartBalance: z.number().nullable().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {

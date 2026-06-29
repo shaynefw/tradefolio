@@ -119,6 +119,11 @@ export const backtestDatasets = sqliteTable("backtest_datasets", {
   brickPoints: integer("brick_points").default(20).notNull(),
   stopBricks: integer("stop_bricks").default(8).notNull(),
   takeProfitBricks: integer("take_profit_bricks").default(2).notNull(),
+  // Optional per-scaling starting balances. When set, the Scaling tab
+  // computes a running balance from start + Σ pnl (honoring per-trade
+  // resets); when null, that scaling is considered "not tracked".
+  premiumStartBalance: real("premium_start_balance"),
+  speedStartBalance: real("speed_start_balance"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .default(sql`(unixepoch() * 1000)`)
     .notNull(),
@@ -149,9 +154,15 @@ export const backtestTrades = sqliteTable("backtest_trades", {
   premiumPnl: real("premium_pnl"),
   premiumBalance: real("premium_balance"),
   premiumLabel: text("premium_label"),
+  // When set, this trade is a manual balance reset for premium scaling —
+  // typically used after the account blew, to declare a new starting point
+  // mid-stream. Running-balance computation jumps to this value before
+  // applying this trade's pnl.
+  premiumResetBalance: real("premium_reset_balance"),
   speedPnl: real("speed_pnl"),
   speedBalance: real("speed_balance"),
   speedLabel: text("speed_label"),
+  speedResetBalance: real("speed_reset_balance"),
   notes: text("notes"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .default(sql`(unixepoch() * 1000)`)

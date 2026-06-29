@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
+  AlertTriangle,
   ArrowDown,
   ArrowUp,
   BarChart2,
@@ -12,6 +13,7 @@ import {
   Plus,
   TrendingDown,
   TrendingUp,
+  Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -38,7 +40,7 @@ import { trpc } from "../lib/trpc";
 
 import {
   buildDatasetFromServer,
-  buildSampleSeedTrades,
+  buildSampleSeed,
   type ServerTradeRow,
 } from "../backtest/dataSource";
 import { TradeFormModal } from "../backtest/TradeFormModal";
@@ -52,6 +54,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
 import { Pencil, Trash2 } from "lucide-react";
 import {
   computeByHour,
@@ -193,18 +203,30 @@ export default function Backtest() {
           },
     [ds],
   );
+  const makeEmptySeries = (): ReturnType<typeof computeScaling> => ({
+    tracked: false,
+    start: 0,
+    end: 0,
+    netPnl: 0,
+    trades: 0,
+    maxBalance: 0,
+    minBalance: 0,
+    maxDrawdown: 0,
+    maxDrawdownPercent: 0,
+    milestones: 0,
+    resetCount: 0,
+    firstBlow: null,
+    blows: [],
+    points: [],
+  });
   const premium = useMemo(
-    () =>
-      ds
-        ? computeScaling(ds, "premium")
-        : { start: 0, end: 0, netPnl: 0, trades: 0, maxBalance: 0, minBalance: 0, maxDrawdown: 0, maxDrawdownPercent: 0, milestones: 0, points: [] },
+    () => (ds ? computeScaling(ds, "premium") : makeEmptySeries()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [ds],
   );
   const speed = useMemo(
-    () =>
-      ds
-        ? computeScaling(ds, "speed")
-        : { start: 0, end: 0, netPnl: 0, trades: 0, maxBalance: 0, minBalance: 0, maxDrawdown: 0, maxDrawdownPercent: 0, milestones: 0, points: [] },
+    () => (ds ? computeScaling(ds, "speed") : makeEmptySeries()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [ds],
   );
 
@@ -223,13 +245,15 @@ export default function Backtest() {
   });
 
   function handleLoadSample() {
-    const seedTrades = buildSampleSeedTrades();
+    const seed = buildSampleSeed();
     createDataset.mutate({
       name: "MNQ Inverse Renko20 (sample)",
       brickPoints: 20,
       stopBricks: 8,
       takeProfitBricks: 2,
-      seedTrades,
+      premiumStartBalance: seed.premiumStartBalance,
+      speedStartBalance: seed.speedStartBalance,
+      seedTrades: seed.trades,
     });
   }
 
@@ -269,6 +293,7 @@ export default function Backtest() {
   const [pendingDatasetDelete, setPendingDatasetDelete] = useState<
     { id: number; name: string; tradeCount: number } | null
   >(null);
+  const [scalingSettingsOpen, setScalingSettingsOpen] = useState(false);
 
   function handleRenameActive() {
     if (!activeMeta) return;
@@ -310,6 +335,15 @@ export default function Backtest() {
                 activeId={activeDatasetId}
                 onChange={setSelectedDatasetId}
               />
+              <button
+                type="button"
+                onClick={() => setScalingSettingsOpen(true)}
+                disabled={!activeMeta}
+                title="Scaling settings"
+                className="rounded-md border border-border bg-card/60 p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+              >
+                <Wallet className="h-3.5 w-3.5" />
+              </button>
               <button
                 type="button"
                 onClick={handleRenameActive}
@@ -410,6 +444,19 @@ export default function Backtest() {
           </AlertDialogContent>
         </AlertDialog>
 
+        {/* Scaling settings dialog */}
+        {activeMeta && (
+          <ScalingSettingsDialog
+            open={scalingSettingsOpen}
+            onOpenChange={setScalingSettingsOpen}
+            datasetId={activeMeta.id}
+            initial={{
+              premiumStartBalance: activeMeta.premiumStartBalance ?? null,
+              speedStartBalance: activeMeta.speedStartBalance ?? null,
+            }}
+          />
+        )}
+
         {/* Ready to render */}
         {ds && core && (
           <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
@@ -441,7 +488,11 @@ export default function Backtest() {
             </TabsContent>
 
             <TabsContent value="scaling" className="space-y-6 mt-6">
-              <ScalingTab premium={premium} speed={speed} />
+              <ScalingTab
+                premium={premium}
+                speed={speed}
+                onOpenSettings={() => setScalingSettingsOpen(true)}
+              />
             </TabsContent>
 
             <TabsContent value="log" className="space-y-6 mt-6">
@@ -508,6 +559,132 @@ interface DatasetSelectorProps {
   datasets: Array<{ id: number; name: string; tradeCount: number }>;
   activeId: number | null;
   onChange: (id: number) => void;
+}
+
+// ---------------------------------------------------------------------------
+// Scaling settings dialog — set the starting balance for Premium / Speed.
+// Empty string saves as null = "stop tracking this scaling".
+// ---------------------------------------------------------------------------
+
+function ScalingSettingsDialog({
+  open,
+  onOpenChange,
+  datasetId,
+  initial,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  datasetId: number;
+  initial: {
+    premiumStartBalance: number | null;
+    speedStartBalance: number | null;
+  };
+}) {
+  const utils = trpc.useUtils();
+  const [premium, setPremium] = useState(
+    initial.premiumStartBalance == null
+      ? ""
+      : String(initial.premiumStartBalance),
+  );
+  const [speed, setSpeed] = useState(
+    initial.speedStartBalance == null ? "" : String(initial.speedStartBalance),
+  );
+
+  // Re-sync when the underlying dataset changes (e.g. user switches datasets
+  // while the dialog is open or after a save).
+  useEffect(() => {
+    if (!open) return;
+    setPremium(
+      initial.premiumStartBalance == null
+        ? ""
+        : String(initial.premiumStartBalance),
+    );
+    setSpeed(
+      initial.speedStartBalance == null
+        ? ""
+        : String(initial.speedStartBalance),
+    );
+  }, [open, initial.premiumStartBalance, initial.speedStartBalance]);
+
+  const mutation = trpc.backtest.dataset.update.useMutation({
+    onSuccess: () => {
+      utils.backtest.dataset.list.invalidate();
+      toast.success("Scaling settings saved");
+      onOpenChange(false);
+    },
+    onError: (err) => toast.error(err.message ?? "Failed to save"),
+  });
+
+  function parseDollar(s: string): number | null {
+    const t = s.trim();
+    if (t === "") return null;
+    const n = Number(t);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    mutation.mutate({
+      id: datasetId,
+      premiumStartBalance: parseDollar(premium),
+      speedStartBalance: parseDollar(speed),
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md bg-card">
+        <DialogHeader>
+          <DialogTitle>Scaling settings</DialogTitle>
+          <DialogDescription>
+            Set a starting balance for each scaling. Balances auto-update as
+            you add trades. Leave blank to stop tracking that scaling.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSave} className="space-y-4">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">
+              Premium starting balance
+            </span>
+            <input
+              type="number"
+              step="any"
+              placeholder="$10,000"
+              value={premium}
+              onChange={(e) => setPremium(e.target.value)}
+              className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">
+              Speed starting balance
+            </span>
+            <input
+              type="number"
+              step="any"
+              placeholder="$3,000"
+              value={speed}
+              onChange={(e) => setSpeed(e.target.value)}
+              className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          </label>
+          <DialogFooter className="gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={mutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function DatasetSelector({ datasets, activeId, onChange }: DatasetSelectorProps) {
@@ -668,12 +845,38 @@ function ScalingSummary({
 }) {
   const positive = series.netPnl >= 0;
   const accentClass = accent === "emerald" ? "text-emerald-400" : "text-sky-400";
+
+  if (!series.tracked) {
+    return (
+      <Card className="bg-card/60">
+        <CardContent className="pt-5 pb-5 space-y-2">
+          <div className="flex items-baseline justify-between">
+            <p className="text-sm font-semibold">{name}</p>
+            <span className="text-xs text-muted-foreground">not tracked</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Set a starting balance on the Scaling tab to begin tracking.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
-    <Card className="bg-card/60">
+    <Card className={cn("bg-card/60", series.firstBlow && "border-red-500/40")}>
       <CardContent className="pt-5 pb-5 space-y-3">
         <div className="flex items-baseline justify-between">
           <p className="text-sm font-semibold">{name}</p>
-          <span className={cn("text-xs", accentClass)}>{series.trades} scaling trades</span>
+          {series.firstBlow ? (
+            <span className="flex items-center gap-1 text-xs font-medium text-red-300">
+              <AlertTriangle className="h-3 w-3" />
+              blew on #{series.firstBlow.index}
+            </span>
+          ) : (
+            <span className={cn("text-xs", accentClass)}>
+              {series.trades} scaling trades
+            </span>
+          )}
         </div>
         <div className="grid grid-cols-3 gap-3 text-sm">
           <div>
@@ -985,14 +1188,26 @@ function TimingTab({
 function ScalingTab({
   premium,
   speed,
+  onOpenSettings,
 }: {
   premium: ReturnType<typeof computeScaling>;
   speed: ReturnType<typeof computeScaling>;
+  onOpenSettings: () => void;
 }) {
   return (
     <div className="space-y-6">
-      <ScalingChart name="Real $ Premium Scaling" series={premium} colorA="#22c55e" />
-      <ScalingChart name="Real $ Speed Scaling" series={speed} colorA="#38bdf8" />
+      <ScalingChart
+        name="Real $ Premium Scaling"
+        series={premium}
+        colorA="#22c55e"
+        onOpenSettings={onOpenSettings}
+      />
+      <ScalingChart
+        name="Real $ Speed Scaling"
+        series={speed}
+        colorA="#38bdf8"
+        onOpenSettings={onOpenSettings}
+      />
 
       {/* Milestone (loss / recovery) events from both series */}
       <MilestoneTable premium={premium} speed={speed} />
@@ -1004,17 +1219,67 @@ function ScalingChart({
   name,
   series,
   colorA,
+  onOpenSettings,
 }: {
   name: string;
   series: ReturnType<typeof computeScaling>;
   colorA: string;
+  onOpenSettings: () => void;
 }) {
   const gradientId = `grad-${name.replace(/\W+/g, "")}`;
+
+  // Not tracked yet → prompt the user to set a starting balance instead of
+  // rendering an empty chart.
+  if (!series.tracked) {
+    return (
+      <section className="space-y-3">
+        <SectionHeader icon={TrendingUp} title={name} />
+        <Card className="bg-card/60">
+          <CardContent className="py-10 text-center">
+            <p className="text-sm font-medium text-foreground">
+              Not tracking this scaling yet
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Set a starting balance and we'll auto-update it as you add trades.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onOpenSettings}
+              className="mt-4 gap-1.5"
+            >
+              <Wallet className="h-3.5 w-3.5" />
+              Set starting balance
+            </Button>
+          </CardContent>
+        </Card>
+      </section>
+    );
+  }
+
   return (
     <section className="space-y-3">
       <SectionHeader icon={TrendingUp} title={name} />
       <Card className="bg-card/60">
         <CardContent className="pt-4">
+          {/* Blow banner — the account went ≤ $0 at some point */}
+          {series.firstBlow && (
+            <div className="mb-3 flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
+              <div className="flex-1">
+                <p className="font-semibold text-red-300">
+                  Account blew on trade #{series.firstBlow.index}
+                  <span className="text-red-400/80 font-normal">
+                    {" · "}{series.firstBlow.date} · balance{" "}
+                    {formatCurrency(series.firstBlow.balance)}
+                  </span>
+                </p>
+                <p className="mt-0.5 text-xs text-red-300/70">
+                  Open the trade and use "Reset balance after this trade" to declare a new starting point.
+                </p>
+              </div>
+            </div>
+          )}
           <ResponsiveContainer width="100%" height={300}>
             <AreaChart data={series.points} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
               <defs>
@@ -1068,6 +1333,16 @@ function ScalingChart({
                 }}
               />
               <ReferenceLine y={series.start} stroke="rgba(255,255,255,0.15)" strokeDasharray="4 4" />
+              <ReferenceLine y={0} stroke="rgba(239,68,68,0.4)" strokeDasharray="2 2" />
+              {series.firstBlow && (
+                <ReferenceLine
+                  x={series.firstBlow.index}
+                  stroke="#ef4444"
+                  strokeWidth={2}
+                  strokeDasharray="4 2"
+                  label={{ value: "BLEW", fill: "#ef4444", fontSize: 10, position: "top" }}
+                />
+              )}
               <Area
                 type="monotone"
                 dataKey="balance"
@@ -1101,8 +1376,14 @@ function ScalingChart({
               </p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Events</p>
-              <p className="font-semibold">{series.milestones} labeled</p>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                {series.resetCount > 0 ? "Resets" : "Events"}
+              </p>
+              <p className="font-semibold">
+                {series.resetCount > 0
+                  ? `${series.resetCount} reset${series.resetCount !== 1 ? "s" : ""}`
+                  : `${series.milestones} labeled`}
+              </p>
             </div>
           </div>
         </CardContent>
