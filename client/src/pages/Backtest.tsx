@@ -1220,6 +1220,66 @@ function MilestoneTable({
 
 type SideFilter = "all" | "LONG" | "SHORT";
 type OutcomeFilter = "all" | "Took Profit" | "Took Loss";
+type SortKey =
+  | "newest"
+  | "oldest"
+  | "dateDesc"
+  | "dateAsc"
+  | "mfeDesc"
+  | "mfeAsc"
+  | "maeDesc"
+  | "maeAsc";
+
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: "newest", label: "Newest added" },
+  { value: "oldest", label: "Oldest added" },
+  { value: "dateDesc", label: "Date — latest first" },
+  { value: "dateAsc", label: "Date — earliest first" },
+  { value: "mfeDesc", label: "MFE high → low" },
+  { value: "mfeAsc", label: "MFE low → high" },
+  { value: "maeDesc", label: "MAE high → low" },
+  { value: "maeAsc", label: "MAE low → high" },
+];
+
+// Stable sort: missing values (null MAE/MFE) sink to the end on both ascending
+// and descending so a row missing data never displaces a row with data.
+function sortTrades(
+  rows: BacktestDataset["trades"],
+  key: SortKey,
+): BacktestDataset["trades"] {
+  const withIdx = rows.map((r, i) => ({ r, i }));
+  withIdx.sort((a, b) => {
+    const cmp = (() => {
+      switch (key) {
+        case "newest":
+          return b.r.index - a.r.index;
+        case "oldest":
+          return a.r.index - b.r.index;
+        case "dateDesc":
+          return b.r.date.getTime() - a.r.date.getTime();
+        case "dateAsc":
+          return a.r.date.getTime() - b.r.date.getTime();
+        case "mfeDesc":
+          return nullsLast(a.r.mfe, b.r.mfe, true);
+        case "mfeAsc":
+          return nullsLast(a.r.mfe, b.r.mfe, false);
+        case "maeDesc":
+          return nullsLast(a.r.mae, b.r.mae, true);
+        case "maeAsc":
+          return nullsLast(a.r.mae, b.r.mae, false);
+      }
+    })();
+    return cmp !== 0 ? cmp : a.i - b.i;
+  });
+  return withIdx.map((x) => x.r);
+}
+
+function nullsLast(a: number | null, b: number | null, desc: boolean): number {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  return desc ? b - a : a - b;
+}
 
 function TradeLogTab({ dataset }: { dataset: BacktestDataset }) {
   // buildDatasetFromServer stashes the dataset id; the modal mutations need it.
@@ -1228,6 +1288,7 @@ function TradeLogTab({ dataset }: { dataset: BacktestDataset }) {
   const [side, setSide] = useState<SideFilter>("all");
   const [outcome, setOutcome] = useState<OutcomeFilter>("all");
   const [recovery, setRecovery] = useState<"all" | "yes" | "no">("all");
+  const [sortKey, setSortKey] = useState<SortKey>("newest");
   const [page, setPage] = useState(0);
   const pageSize = 50;
 
@@ -1249,7 +1310,7 @@ function TradeLogTab({ dataset }: { dataset: BacktestDataset }) {
   });
 
   const rows = useMemo(() => {
-    return dataset.trades.filter((t) => {
+    const filtered = dataset.trades.filter((t) => {
       if (!t.validEntry) return false;
       if (side !== "all" && t.side !== side) return false;
       if (outcome !== "all" && t.outcome !== outcome) return false;
@@ -1257,7 +1318,8 @@ function TradeLogTab({ dataset }: { dataset: BacktestDataset }) {
       if (recovery === "no" && t.recoveryStage !== "none") return false;
       return true;
     });
-  }, [dataset.trades, side, outcome, recovery]);
+    return sortTrades(filtered, sortKey);
+  }, [dataset.trades, side, outcome, recovery, sortKey]);
 
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   const visible = rows.slice(page * pageSize, (page + 1) * pageSize);
@@ -1305,6 +1367,25 @@ function TradeLogTab({ dataset }: { dataset: BacktestDataset }) {
             { value: "no", label: "Regular" },
           ]}
         />
+        <label className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-2 py-1">
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">
+            Sort
+          </span>
+          <select
+            value={sortKey}
+            onChange={(e) => {
+              setSortKey(e.target.value as SortKey);
+              setPage(0);
+            }}
+            className="bg-transparent text-xs text-foreground focus:outline-none"
+          >
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value} className="bg-zinc-900">
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <span className="ml-auto text-xs text-muted-foreground">
           {rows.length.toLocaleString()} rows · page {page + 1} of {pageCount}
         </span>

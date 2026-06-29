@@ -38,9 +38,19 @@ interface FormState {
   notes: string;
 }
 
+// Whole-hour options across 24h, formatted to match the spreadsheet's style
+// ("9:00:00 AM"). Free-form times entered before this dropdown still round-trip
+// — the select tolerates a non-matching value by falling back to the first
+// option visually but the persisted value is preserved on edit.
+const HOUR_OPTIONS: string[] = Array.from({ length: 24 }, (_, h) => {
+  const period = h >= 12 ? "PM" : "AM";
+  const display = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${display}:00:00 ${period}`;
+});
+
 const EMPTY_FORM: FormState = {
   date: new Date().toISOString().slice(0, 10),
-  time: "",
+  time: "9:00:00 AM",
   side: "LONG",
   tradeNo: "1",
   validEntry: true,
@@ -209,13 +219,23 @@ export function TradeFormModal({
               />
             </Field>
             <Field label="Time">
-              <input
-                type="text"
-                placeholder="9:00:00 AM"
+              <select
                 value={form.time}
                 onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))}
                 className={inputClass}
-              />
+              >
+                {/* When editing a row whose time isn't on the hour, surface it
+                    as the first option so the existing value isn't silently
+                    replaced. */}
+                {form.time && !HOUR_OPTIONS.includes(form.time) && (
+                  <option value={form.time}>{form.time}</option>
+                )}
+                {HOUR_OPTIONS.map((h) => (
+                  <option key={h} value={h}>
+                    {h}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="Side">
               <select
