@@ -244,6 +244,50 @@ export default function Backtest() {
     });
   }
 
+  // Rename mutation — uses prompt() so we don't have to build a second modal
+  // just for a single text field. Falls back to a toast on cancel/empty.
+  const renameDataset = trpc.backtest.dataset.update.useMutation({
+    onSuccess: () => {
+      utils.backtest.dataset.list.invalidate();
+      toast.success("Dataset renamed");
+    },
+    onError: (err) => toast.error(err.message ?? "Failed to rename"),
+  });
+
+  const deleteDatasetMutation = trpc.backtest.dataset.delete.useMutation({
+    onSuccess: () => {
+      // Drop the local selection so the page falls back to the first
+      // remaining dataset (or the empty state).
+      setSelectedDatasetId(null);
+      utils.backtest.dataset.list.invalidate();
+      utils.backtest.trade.list.reset();
+      toast.success("Dataset deleted");
+    },
+    onError: (err) => toast.error(err.message ?? "Failed to delete dataset"),
+  });
+
+  const [pendingDatasetDelete, setPendingDatasetDelete] = useState<
+    { id: number; name: string; tradeCount: number } | null
+  >(null);
+
+  function handleRenameActive() {
+    if (!activeMeta) return;
+    const next = window.prompt("Rename dataset", activeMeta.name);
+    if (!next || next.trim() === activeMeta.name) return;
+    renameDataset.mutate({ id: activeMeta.id, name: next.trim() });
+  }
+
+  function handleDeleteActive() {
+    if (!activeMeta) return;
+    const meta = datasets.find((d) => d.id === activeMeta.id);
+    if (!meta) return;
+    setPendingDatasetDelete({
+      id: meta.id,
+      name: meta.name,
+      tradeCount: meta.tradeCount,
+    });
+  }
+
   const isLoading = datasetsQuery.isLoading;
   const isEmpty = !isLoading && datasets.length === 0;
   const isTradesLoading = activeDatasetId != null && tradesQuery.isLoading;
@@ -266,6 +310,24 @@ export default function Backtest() {
                 activeId={activeDatasetId}
                 onChange={setSelectedDatasetId}
               />
+              <button
+                type="button"
+                onClick={handleRenameActive}
+                disabled={!activeMeta || renameDataset.isPending}
+                title="Rename dataset"
+                className="rounded-md border border-border bg-card/60 p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteActive}
+                disabled={!activeMeta || deleteDatasetMutation.isPending}
+                title="Delete dataset"
+                className="rounded-md border border-border bg-card/60 p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive-foreground disabled:opacity-40"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
               <Button
                 variant="outline"
                 size="sm"
@@ -302,6 +364,51 @@ export default function Backtest() {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         )}
+
+        {/* Dataset delete confirmation */}
+        <AlertDialog
+          open={pendingDatasetDelete != null}
+          onOpenChange={(o) => !o && setPendingDatasetDelete(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this dataset?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {pendingDatasetDelete && (
+                  <>
+                    <span className="font-medium text-foreground">
+                      {pendingDatasetDelete.name}
+                    </span>{" "}
+                    will be removed along with all{" "}
+                    {pendingDatasetDelete.tradeCount.toLocaleString()} of its
+                    trades. This can't be undone.
+                  </>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleteDatasetMutation.isPending}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                disabled={deleteDatasetMutation.isPending}
+                onClick={() => {
+                  if (pendingDatasetDelete) {
+                    deleteDatasetMutation.mutate(
+                      { id: pendingDatasetDelete.id },
+                      { onSuccess: () => setPendingDatasetDelete(null) },
+                    );
+                  }
+                }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {deleteDatasetMutation.isPending
+                  ? "Deleting…"
+                  : "Delete dataset"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Ready to render */}
         {ds && core && (
