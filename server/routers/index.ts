@@ -5,6 +5,7 @@ import { tradeRouter } from "./trade.js";
 import { tagRouter } from "./tag.js";
 import { strategyRouter } from "./strategy.js";
 import { backupRouter } from "./backup.js";
+import { backtestRouter } from "./backtest.js";
 
 export const appRouter = router({
   auth: authRouter,
@@ -13,6 +14,7 @@ export const appRouter = router({
   tag: tagRouter,
   strategy: strategyRouter,
   backup: backupRouter,
+  backtest: backtestRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -90,6 +90,40 @@ export async function initDb() {
       tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
       UNIQUE(trade_id, tag_id)
     )`,
+    `CREATE TABLE IF NOT EXISTS backtest_datasets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      brick_points INTEGER NOT NULL DEFAULT 20,
+      stop_bricks INTEGER NOT NULL DEFAULT 8,
+      take_profit_bricks INTEGER NOT NULL DEFAULT 2,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    )`,
+    `CREATE TABLE IF NOT EXISTS backtest_trades (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dataset_id INTEGER NOT NULL REFERENCES backtest_datasets(id) ON DELETE CASCADE,
+      sequence_idx INTEGER NOT NULL,
+      date INTEGER NOT NULL,
+      time TEXT NOT NULL DEFAULT '',
+      side TEXT NOT NULL CHECK(side IN ('LONG', 'SHORT')),
+      trade_no INTEGER NOT NULL DEFAULT 0,
+      valid_entry INTEGER NOT NULL DEFAULT 1,
+      outcome TEXT CHECK(outcome IN ('Took Profit', 'Took Loss') OR outcome IS NULL),
+      mae REAL,
+      mfe REAL,
+      recovery_stage TEXT NOT NULL DEFAULT 'none' CHECK(recovery_stage IN ('none', 'first', 'second')),
+      premium_pnl REAL,
+      premium_balance REAL,
+      premium_label TEXT,
+      speed_pnl REAL,
+      speed_balance REAL,
+      speed_label TEXT,
+      notes TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_backtest_trades_dataset ON backtest_trades(dataset_id, sequence_idx)`,
   ];
 
   for (const sql of statements) {
