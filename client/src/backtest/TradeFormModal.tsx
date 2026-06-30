@@ -12,7 +12,9 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { trpc } from "../lib/trpc";
+import { formatCurrency } from "../lib/utils";
 import type { BacktestTrade, Outcome, RecoveryStage, Side } from "./types";
+import type { ScalingSeries } from "./calculations";
 
 // ---------------------------------------------------------------------------
 // Local form state — mirrors the tradeCreateInput shape but keeps strings for
@@ -36,12 +38,14 @@ interface FormState {
   speedLabel: string;
   speedResetBalance: string;
   notes: string;
-  // Placeholder mode — the user reserves a row for an upcoming recovery
-  // trade. When true, the row renders as a glowing "Pending Recovery"
-  // banner in the log and nearly all other fields are ignored until edit.
+  // Placeholder mode — the user reserves a row for an upcoming trade.
+  // When true, the row renders as a glowing banner in the log and nearly
+  // all other fields are ignored until edit.
   isPending: boolean;
-  // Recovery stage to pre-assign when isPending is true. Defaults to first.
-  pendingStage: "first" | "second";
+  // What to pre-assign when isPending is true.
+  //   regular → a plain placeholder (no recovery)
+  //   first / second → R1 / R2 recovery placeholder
+  pendingStage: "regular" | "first" | "second";
 }
 
 // Whole-hour options across 24h, formatted to match the spreadsheet's style
@@ -72,7 +76,7 @@ const EMPTY_FORM: FormState = {
   speedResetBalance: "",
   notes: "",
   isPending: false,
-  pendingStage: "first",
+  pendingStage: "regular",
 };
 
 function tradeToForm(t: BacktestTrade): FormState {
@@ -96,7 +100,12 @@ function tradeToForm(t: BacktestTrade): FormState {
       t.speedResetBalance == null ? "" : String(t.speedResetBalance),
     notes: "",
     isPending: t.isPending,
-    pendingStage: t.recoveryStage === "second" ? "second" : "first",
+    pendingStage:
+      t.recoveryStage === "second"
+        ? "second"
+        : t.recoveryStage === "first"
+        ? "first"
+        : "regular",
   };
 }
 
@@ -125,6 +134,11 @@ interface TradeFormModalProps {
   datasetId: number;
   // When editing, pass the existing trade (must have .id). When adding, omit.
   editingTrade?: BacktestTrade | null;
+  // Live scaling series for both schedules — used to show a read-only
+  // "current balance" hint above each PnL input so the user can size the
+  // trade with their balance in view.
+  premiumSeries: ScalingSeries;
+  speedSeries: ScalingSeries;
 }
 
 export function TradeFormModal({
@@ -132,6 +146,8 @@ export function TradeFormModal({
   onOpenChange,
   datasetId,
   editingTrade,
+  premiumSeries,
+  speedSeries,
 }: TradeFormModalProps) {
   const isEdit = editingTrade?.id != null;
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -185,7 +201,7 @@ export function TradeFormModal({
       return;
     }
 
-    // Pending-recovery placeholder: stash a minimal row with sensible
+    // Pending-trade placeholder: stash a minimal row with sensible
     // defaults so the user can edit it once the actual trade arrives.
     const payload = form.isPending
       ? {
@@ -197,7 +213,9 @@ export function TradeFormModal({
           outcome: null,
           mae: null,
           mfe: null,
-          recoveryStage: form.pendingStage,
+          recoveryStage: (form.pendingStage === "regular"
+            ? "none"
+            : form.pendingStage) as RecoveryStage,
           premiumPnl: null,
           premiumBalance: null,
           premiumLabel: null,
@@ -264,27 +282,28 @@ export function TradeFormModal({
             />
             <div className="flex-1 text-sm">
               <p className="font-medium text-amber-200">
-                Mark as pending recovery
+                Mark as pending trade
               </p>
               <p className="text-xs text-amber-200/70">
-                Reserves a placeholder row for an upcoming recovery trade — fill
-                in the details after it fires.
+                Reserves a placeholder row for an upcoming trade — fill in the
+                details after it fires.
               </p>
             </div>
           </label>
 
           {form.isPending ? (
-            <Field label="Pending stage">
+            <Field label="Pending type">
               <select
                 value={form.pendingStage}
                 onChange={(e) =>
                   setForm((f) => ({
                     ...f,
-                    pendingStage: e.target.value as "first" | "second",
+                    pendingStage: e.target.value as "regular" | "first" | "second",
                   }))
                 }
                 className={inputClass}
               >
+                <option value="regular">Regular trade</option>
                 <option value="first">Recovery (R1)</option>
                 <option value="second">Recovery 2 (R2)</option>
               </select>
@@ -441,9 +460,15 @@ export function TradeFormModal({
                 </p>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                      Premium
-                    </p>
+                    <div className="flex items-baseline justify-between">
+                      <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                        Premium
+                      </p>
+                      <CurrentBalanceHint
+                        series={premiumSeries}
+                        editingIndex={editingTrade?.index ?? null}
+                      />
+                    </div>
                     <Field label="PnL">
                       <input
                         type="number"
@@ -465,9 +490,15 @@ export function TradeFormModal({
                     </Field>
                   </div>
                   <div className="space-y-2">
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                      Speed
-                    </p>
+                    <div className="flex items-baseline justify-between">
+                      <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                        Speed
+                      </p>
+                      <CurrentBalanceHint
+                        series={speedSeries}
+                        editingIndex={editingTrade?.index ?? null}
+                      />
+                    </div>
                     <Field label="PnL">
                       <input
                         type="number"
@@ -538,3 +569,33 @@ function Field({
 
 const inputClass =
   "h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring";
+
+// Tiny read-only badge that shows the running balance the user is "starting
+// from" for this trade. When adding, that's the series' current end balance.
+// When editing, it's the balance just before this trade was applied (so the
+// user can size relative to what they had on entry).
+function CurrentBalanceHint({
+  series,
+  editingIndex,
+}: {
+  series: ScalingSeries;
+  editingIndex: number | null;
+}) {
+  if (!series.tracked) {
+    return (
+      <span className="text-[10px] text-muted-foreground">not tracked</span>
+    );
+  }
+  const balance =
+    editingIndex == null
+      ? series.end
+      : series.points[editingIndex - 1]?.balance ?? series.start;
+  return (
+    <span className="text-[10px] text-muted-foreground">
+      {editingIndex == null ? "Current: " : "Before this trade: "}
+      <span className="font-medium text-foreground">
+        {formatCurrency(balance)}
+      </span>
+    </span>
+  );
+}

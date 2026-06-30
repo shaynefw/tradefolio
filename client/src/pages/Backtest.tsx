@@ -509,7 +509,11 @@ export default function Backtest() {
             </TabsContent>
 
             <TabsContent value="log" className="space-y-6 mt-6">
-              <TradeLogTab dataset={ds} />
+              <TradeLogTab
+                dataset={ds}
+                premiumSeries={premium}
+                speedSeries={speed}
+              />
             </TabsContent>
           </Tabs>
         )}
@@ -1495,7 +1499,15 @@ function nullsLast(a: number | null, b: number | null, desc: boolean): number {
   return desc ? b - a : a - b;
 }
 
-function TradeLogTab({ dataset }: { dataset: BacktestDataset }) {
+function TradeLogTab({
+  dataset,
+  premiumSeries,
+  speedSeries,
+}: {
+  dataset: BacktestDataset;
+  premiumSeries: ReturnType<typeof computeScaling>;
+  speedSeries: ReturnType<typeof computeScaling>;
+}) {
   // buildDatasetFromServer stashes the dataset id; the modal mutations need it.
   const datasetId = dataset.id;
 
@@ -1640,47 +1652,93 @@ function TradeLogTab({ dataset }: { dataset: BacktestDataset }) {
               <tbody>
                 {visible.map((t) =>
                   t.isPending ? (
-                    <tr
-                      key={t.index}
-                      className="group border-t border-border/40"
-                    >
-                      <td
-                        colSpan={10}
-                        className="relative px-3 py-4 text-center bg-gradient-to-r from-amber-500/5 via-amber-500/20 to-amber-500/5 ring-1 ring-inset ring-amber-500/30"
-                      >
-                        <span className="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-amber-200 animate-pulse">
-                          <span className="text-lg leading-none">⏳</span>
-                          Pending Recovery{t.recoveryStage === "second" ? " 2" : ""}
-                        </span>
-                      </td>
-                      <td className="bg-gradient-to-r from-amber-500/5 via-amber-500/20 to-amber-500/5 px-3 py-4 text-right ring-1 ring-inset ring-amber-500/30">
-                        <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                          {t.id != null && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingTrade(t);
-                                  setModalOpen(true);
-                                }}
-                                title="Edit / fill in trade"
-                                className="rounded p-1 text-amber-200/80 hover:bg-accent hover:text-foreground"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setPendingDelete(t)}
-                                title="Delete pending row"
-                                className="rounded p-1 text-amber-200/80 hover:bg-destructive/10 hover:text-destructive-foreground"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+                    (() => {
+                      // Pending placeholder — themed by stage so a pending
+                      // regular trade reads as sky-blue (matching live
+                      // regular) while pending R1/R2 stay in amber/orange.
+                      const pendingTheme =
+                        t.recoveryStage === "second"
+                          ? {
+                              bg: "from-orange-500/5 via-orange-500/20 to-orange-500/5",
+                              ring: "ring-orange-500/30",
+                              text: "text-orange-200",
+                              accent: "text-orange-200/80",
+                              label: "Pending Recovery 2",
+                            }
+                          : t.recoveryStage === "first"
+                          ? {
+                              bg: "from-amber-500/5 via-amber-500/20 to-amber-500/5",
+                              ring: "ring-amber-500/30",
+                              text: "text-amber-200",
+                              accent: "text-amber-200/80",
+                              label: "Pending Recovery",
+                            }
+                          : {
+                              bg: "from-sky-500/5 via-sky-500/20 to-sky-500/5",
+                              ring: "ring-sky-500/30",
+                              text: "text-sky-200",
+                              accent: "text-sky-200/80",
+                              label: "Pending Trade",
+                            };
+                      return (
+                        <tr
+                          key={t.index}
+                          className="group border-t border-border/40"
+                        >
+                          <td
+                            colSpan={10}
+                            className={cn(
+                              "relative px-3 py-4 text-center bg-gradient-to-r ring-1 ring-inset",
+                              pendingTheme.bg,
+                              pendingTheme.ring,
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-wider animate-pulse",
+                                pendingTheme.text,
+                              )}
+                            >
+                              <span className="text-lg leading-none">⏳</span>
+                              {pendingTheme.label}
+                            </span>
+                          </td>
+                          <td
+                            className={cn(
+                              "bg-gradient-to-r px-3 py-4 text-right ring-1 ring-inset",
+                              pendingTheme.bg,
+                              pendingTheme.ring,
+                            )}
+                          >
+                            <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                              {t.id != null && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingTrade(t);
+                                      setModalOpen(true);
+                                    }}
+                                    title="Edit / fill in trade"
+                                    className={cn("rounded p-1 hover:bg-accent hover:text-foreground", pendingTheme.accent)}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPendingDelete(t)}
+                                    title="Delete pending row"
+                                    className={cn("rounded p-1 hover:bg-destructive/10 hover:text-destructive-foreground", pendingTheme.accent)}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })()
                   ) : t.outcome == null ? (
                     (() => {
                       // Live trade — only date / time / side / trade# are
@@ -1915,6 +1973,8 @@ function TradeLogTab({ dataset }: { dataset: BacktestDataset }) {
             setModalOpen(o);
             if (!o) setEditingTrade(null);
           }}
+          premiumSeries={premiumSeries}
+          speedSeries={speedSeries}
           datasetId={datasetId}
           editingTrade={editingTrade}
         />
