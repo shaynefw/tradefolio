@@ -1612,24 +1612,22 @@ function TradeLogTab({ dataset }: { dataset: BacktestDataset }) {
             <table className="w-full text-sm">
               <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
                 <tr>
-                  <th className="px-3 py-2 text-left">#</th>
                   <th className="px-3 py-2 text-left">Date</th>
                   <th className="px-3 py-2 text-left">Time</th>
                   <th className="px-3 py-2 text-left">Side</th>
                   <th className="px-3 py-2 text-left">Trade</th>
+                  <th className="px-3 py-2 text-right">MAE (pts)</th>
+                  <th className="px-3 py-2 text-right">MFE (pts)</th>
                   <th className="px-3 py-2 text-left">Outcome</th>
-                  <th className="px-3 py-2 text-right">MFE</th>
-                  <th className="px-3 py-2 text-right">MAE</th>
                   <th className="px-3 py-2 text-left">Recovery</th>
-                  <th className="px-3 py-2 text-right">Premium $</th>
-                  <th className="px-3 py-2 text-right">Speed $</th>
+                  <th className="px-3 py-2 text-right">Premium</th>
+                  <th className="px-3 py-2 text-right">Speed</th>
                   <th className="px-3 py-2 text-right w-20">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {visible.map((t) => (
                   <tr key={t.index} className="group border-t border-border/40 hover:bg-accent/20">
-                    <td className="px-3 py-2 text-xs text-muted-foreground">{t.index + 1}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       {t.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </td>
@@ -1647,6 +1645,8 @@ function TradeLogTab({ dataset }: { dataset: BacktestDataset }) {
                       </span>
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">T{t.tradeNo}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{t.mae ?? "—"}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{t.mfe ?? "—"}</td>
                     <td className="px-3 py-2">
                       <span
                         className={cn(
@@ -1661,8 +1661,6 @@ function TradeLogTab({ dataset }: { dataset: BacktestDataset }) {
                         {t.outcome ?? "—"}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums">{t.mfe ?? "—"}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{t.mae ?? "—"}</td>
                     <td className="px-3 py-2 text-xs">
                       {t.recoveryStage === "first" ? (
                         <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-300">R1</span>
