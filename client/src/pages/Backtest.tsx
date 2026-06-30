@@ -1681,6 +1681,124 @@ function TradeLogTab({ dataset }: { dataset: BacktestDataset }) {
                         </div>
                       </td>
                     </tr>
+                  ) : t.outcome == null ? (
+                    (() => {
+                      // Live trade — only date / time / side / trade# are
+                      // known. Everything downstream gets replaced by a
+                      // pulsing banner colored by recovery stage so a live
+                      // recovery reads differently from a live regular trade.
+                      const liveTheme =
+                        t.recoveryStage === "second"
+                          ? {
+                              bg: "from-orange-500/5 via-orange-500/20 to-orange-500/5",
+                              ring: "ring-orange-500/30",
+                              text: "text-orange-200",
+                              label: "Live Recovery 2",
+                            }
+                          : t.recoveryStage === "first"
+                          ? {
+                              bg: "from-amber-500/5 via-amber-500/20 to-amber-500/5",
+                              ring: "ring-amber-500/30",
+                              text: "text-amber-200",
+                              label: "Live Recovery",
+                            }
+                          : {
+                              bg: "from-sky-500/5 via-sky-500/20 to-sky-500/5",
+                              ring: "ring-sky-500/30",
+                              text: "text-sky-200",
+                              label: "Live",
+                            };
+                      return (
+                        <tr
+                          key={t.index}
+                          className="group border-t border-border/40"
+                        >
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {t.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">{t.time}</td>
+                          <td className="px-3 py-2">
+                            <span
+                              className={cn(
+                                "rounded px-1.5 py-0.5 text-xs font-medium",
+                                t.side === "LONG"
+                                  ? "bg-green-500/15 text-green-300"
+                                  : "bg-blue-500/15 text-blue-300",
+                              )}
+                            >
+                              {t.side}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-muted-foreground">T{t.tradeNo}</td>
+                          <td
+                            colSpan={6}
+                            className={cn(
+                              "px-3 py-2 text-center bg-gradient-to-r ring-1 ring-inset",
+                              liveTheme.bg,
+                              liveTheme.ring,
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-wider animate-pulse",
+                                liveTheme.text,
+                              )}
+                            >
+                              <span className="relative inline-flex h-2 w-2">
+                                <span className={cn(
+                                  "absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping",
+                                  t.recoveryStage === "second" ? "bg-orange-400" : t.recoveryStage === "first" ? "bg-amber-400" : "bg-sky-400",
+                                )} />
+                                <span className={cn(
+                                  "relative inline-flex h-2 w-2 rounded-full",
+                                  t.recoveryStage === "second" ? "bg-orange-400" : t.recoveryStage === "first" ? "bg-amber-400" : "bg-sky-400",
+                                )} />
+                              </span>
+                              {liveTheme.label}
+                            </span>
+                          </td>
+                          <td className={cn(
+                            "px-3 py-2 text-right bg-gradient-to-r ring-1 ring-inset",
+                            liveTheme.bg,
+                            liveTheme.ring,
+                          )}>
+                            <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                              {t.id != null && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingTrade(t);
+                                      setModalOpen(true);
+                                    }}
+                                    title="Close trade — fill in outcome / MAE / MFE"
+                                    className={cn(
+                                      "rounded p-1 hover:bg-accent hover:text-foreground",
+                                      liveTheme.text,
+                                      "opacity-80",
+                                    )}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPendingDelete(t)}
+                                    title="Delete trade"
+                                    className={cn(
+                                      "rounded p-1 hover:bg-destructive/10 hover:text-destructive-foreground",
+                                      liveTheme.text,
+                                      "opacity-80",
+                                    )}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })()
                   ) : (
                   <tr key={t.index} className="group border-t border-border/40 hover:bg-accent/20">
                     <td className="px-3 py-2 whitespace-nowrap">
