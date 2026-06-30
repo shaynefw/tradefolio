@@ -1626,7 +1626,50 @@ function TradeLogTab({ dataset }: { dataset: BacktestDataset }) {
                 </tr>
               </thead>
               <tbody>
-                {visible.map((t) => (
+                {visible.map((t) =>
+                  t.isPending ? (
+                    <tr
+                      key={t.index}
+                      className="group border-t border-border/40"
+                    >
+                      <td
+                        colSpan={10}
+                        className="relative px-3 py-4 text-center bg-gradient-to-r from-amber-500/5 via-amber-500/20 to-amber-500/5 ring-1 ring-inset ring-amber-500/30"
+                      >
+                        <span className="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-amber-200 animate-pulse">
+                          <span className="text-lg leading-none">⏳</span>
+                          Pending Recovery{t.recoveryStage === "second" ? " 2" : ""}
+                        </span>
+                      </td>
+                      <td className="bg-gradient-to-r from-amber-500/5 via-amber-500/20 to-amber-500/5 px-3 py-4 text-right ring-1 ring-inset ring-amber-500/30">
+                        <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                          {t.id != null && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingTrade(t);
+                                  setModalOpen(true);
+                                }}
+                                title="Edit / fill in trade"
+                                className="rounded p-1 text-amber-200/80 hover:bg-accent hover:text-foreground"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPendingDelete(t)}
+                                title="Delete pending row"
+                                className="rounded p-1 text-amber-200/80 hover:bg-destructive/10 hover:text-destructive-foreground"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
                   <tr key={t.index} className="group border-t border-border/40 hover:bg-accent/20">
                     <td className="px-3 py-2 whitespace-nowrap">
                       {t.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
@@ -1704,7 +1747,8 @@ function TradeLogTab({ dataset }: { dataset: BacktestDataset }) {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  ),
+                )}
               </tbody>
             </table>
           </div>

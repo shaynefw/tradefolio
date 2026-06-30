@@ -36,6 +36,12 @@ interface FormState {
   speedLabel: string;
   speedResetBalance: string;
   notes: string;
+  // Placeholder mode — the user reserves a row for an upcoming recovery
+  // trade. When true, the row renders as a glowing "Pending Recovery"
+  // banner in the log and nearly all other fields are ignored until edit.
+  isPending: boolean;
+  // Recovery stage to pre-assign when isPending is true. Defaults to first.
+  pendingStage: "first" | "second";
 }
 
 // Whole-hour options across 24h, formatted to match the spreadsheet's style
@@ -65,6 +71,8 @@ const EMPTY_FORM: FormState = {
   speedLabel: "",
   speedResetBalance: "",
   notes: "",
+  isPending: false,
+  pendingStage: "first",
 };
 
 function tradeToForm(t: BacktestTrade): FormState {
@@ -87,6 +95,8 @@ function tradeToForm(t: BacktestTrade): FormState {
     speedResetBalance:
       t.speedResetBalance == null ? "" : String(t.speedResetBalance),
     notes: "",
+    isPending: t.isPending,
+    pendingStage: t.recoveryStage === "second" ? "second" : "first",
   };
 }
 
@@ -175,27 +185,52 @@ export function TradeFormModal({
       return;
     }
 
-    const payload = {
-      // Local midnight on the chosen date — same convention as the parser.
-      date: new Date(`${form.date}T00:00:00`).getTime(),
-      time: form.time.trim(),
-      side: form.side,
-      tradeNo: Number(form.tradeNo) || 0,
-      validEntry: form.validEntry,
-      outcome: (form.outcome || null) as Outcome | null,
-      mae: num(form.mae),
-      mfe: num(form.mfe),
-      recoveryStage: form.recoveryStage,
-      premiumPnl: num(form.premiumPnl),
-      premiumBalance: null, // auto-computed from start + Σ pnl
-      premiumLabel: str(form.premiumLabel),
-      premiumResetBalance: num(form.premiumResetBalance),
-      speedPnl: num(form.speedPnl),
-      speedBalance: null, // auto-computed
-      speedLabel: str(form.speedLabel),
-      speedResetBalance: num(form.speedResetBalance),
-      notes: str(form.notes),
-    };
+    // Pending-recovery placeholder: stash a minimal row with sensible
+    // defaults so the user can edit it once the actual trade arrives.
+    const payload = form.isPending
+      ? {
+          date: new Date(`${form.date}T00:00:00`).getTime(),
+          time: "",
+          side: "LONG" as Side,
+          tradeNo: 0,
+          validEntry: true,
+          outcome: null,
+          mae: null,
+          mfe: null,
+          recoveryStage: form.pendingStage,
+          premiumPnl: null,
+          premiumBalance: null,
+          premiumLabel: null,
+          premiumResetBalance: null,
+          speedPnl: null,
+          speedBalance: null,
+          speedLabel: null,
+          speedResetBalance: null,
+          notes: null,
+          isPending: true,
+        }
+      : {
+          // Local midnight on the chosen date — same convention as the parser.
+          date: new Date(`${form.date}T00:00:00`).getTime(),
+          time: form.time.trim(),
+          side: form.side,
+          tradeNo: Number(form.tradeNo) || 0,
+          validEntry: form.validEntry,
+          outcome: (form.outcome || null) as Outcome | null,
+          mae: num(form.mae),
+          mfe: num(form.mfe),
+          recoveryStage: form.recoveryStage,
+          premiumPnl: num(form.premiumPnl),
+          premiumBalance: null, // auto-computed from start + Σ pnl
+          premiumLabel: str(form.premiumLabel),
+          premiumResetBalance: num(form.premiumResetBalance),
+          speedPnl: num(form.speedPnl),
+          speedBalance: null, // auto-computed
+          speedLabel: str(form.speedLabel),
+          speedResetBalance: num(form.speedResetBalance),
+          notes: str(form.notes),
+          isPending: false,
+        };
 
     if (isEdit && editingTrade?.id != null) {
       updateMutation.mutate({ id: editingTrade.id, patch: payload });
@@ -217,6 +252,45 @@ export function TradeFormModal({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Pending recovery placeholder toggle — collapses the form when on */}
+          <label className="flex items-start gap-3 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2.5">
+            <input
+              type="checkbox"
+              checked={form.isPending}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, isPending: e.target.checked }))
+              }
+              className="mt-0.5 h-4 w-4 accent-amber-500"
+            />
+            <div className="flex-1 text-sm">
+              <p className="font-medium text-amber-200">
+                Mark as pending recovery
+              </p>
+              <p className="text-xs text-amber-200/70">
+                Reserves a placeholder row for an upcoming recovery trade — fill
+                in the details after it fires.
+              </p>
+            </div>
+          </label>
+
+          {form.isPending ? (
+            <Field label="Pending stage">
+              <select
+                value={form.pendingStage}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    pendingStage: e.target.value as "first" | "second",
+                  }))
+                }
+                className={inputClass}
+              >
+                <option value="first">Recovery (R1)</option>
+                <option value="second">Recovery 2 (R2)</option>
+              </select>
+            </Field>
+          ) : (
+          <>
           {/* Row 1: Date / Time / Side / Trade# */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Field label="Date">
@@ -415,6 +489,8 @@ export function TradeFormModal({
               </div>
             )}
           </div>
+          </>
+          )}
 
           <DialogFooter className="gap-2 pt-2">
             <Button

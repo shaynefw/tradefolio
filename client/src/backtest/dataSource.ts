@@ -40,6 +40,7 @@ export interface SeedTradeInput {
   speedLabel: string | null;
   speedResetBalance: number | null;
   notes: string | null;
+  isPending: boolean;
 }
 
 export interface SampleSeed {
@@ -81,6 +82,7 @@ export function buildSampleSeed(): SampleSeed {
       speedLabel: t.speed?.label ?? null,
       speedResetBalance: null,
       notes: null,
+      isPending: false,
     })),
   };
 }
@@ -124,6 +126,7 @@ export interface ServerTradeRow {
   speedLabel: string | null;
   speedResetBalance: number | null;
   notes: string | null;
+  isPending: boolean;
 }
 
 function parseHourFromTime(time: string, fallbackDate: Date): number {
@@ -179,6 +182,7 @@ export function serverRowToBacktestTrade(
         : null,
     premiumResetBalance: row.premiumResetBalance,
     speedResetBalance: row.speedResetBalance,
+    isPending: row.isPending,
     winStreakAt: null,
     lossStreakAt: null,
   };

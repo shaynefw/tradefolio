@@ -35,6 +35,9 @@ export interface BacktestTrade {
   mae: number | null;     // points; null when the CSV had "-"
   mfe: number | null;     // points
   recoveryStage: RecoveryStage; // parsed from the spreadsheet's recovery col
+  // Placeholder for an upcoming recovery — user reserves a row before the
+  // trade fires. Combined with recoveryStage to indicate R1 vs R2 pending.
+  isPending: boolean;
   premium: ScalingRow | null;
   speed: ScalingRow | null;
   // Per-trade manual balance reset for each scaling. Non-null means the

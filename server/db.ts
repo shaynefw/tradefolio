@@ -145,6 +145,11 @@ export async function initDb() {
     "REAL",
   );
   await addColumnIfMissing("backtest_trades", "speed_reset_balance", "REAL");
+  await addColumnIfMissing(
+    "backtest_trades",
+    "is_pending",
+    "INTEGER NOT NULL DEFAULT 0",
+  );
 }
 
 async function addColumnIfMissing(

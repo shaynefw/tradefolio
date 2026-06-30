@@ -36,6 +36,7 @@ const tradeInputShape = {
   speedLabel: z.string().nullable().optional(),
   speedResetBalance: z.number().nullable().optional(),
   notes: z.string().nullable().optional(),
+  isPending: z.boolean().default(false),
 };
 
 const tradeCreateInput = z.object(tradeInputShape);
@@ -58,6 +59,7 @@ const tradePatchInput = z.object({
   speedLabel: z.string().nullable().optional(),
   speedResetBalance: z.number().nullable().optional(),
   notes: z.string().nullable().optional(),
+  isPending: z.boolean().optional(),
 });
 
 // ---------------------------------------------------------------------------

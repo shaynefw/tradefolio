@@ -151,6 +151,11 @@ export const backtestTrades = sqliteTable("backtest_trades", {
   recoveryStage: text("recovery_stage", { enum: ["none", "first", "second"] })
     .default("none")
     .notNull(),
+  // When true, this trade is a placeholder for an upcoming recovery — the
+  // user knows the next signal will be a recovery and reserves a row for it
+  // before the trade actually fires. Combined with recoveryStage="first" or
+  // "second" to indicate which one is pending.
+  isPending: integer("is_pending", { mode: "boolean" }).default(false).notNull(),
   premiumPnl: real("premium_pnl"),
   premiumBalance: real("premium_balance"),
   premiumLabel: text("premium_label"),
