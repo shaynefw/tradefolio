@@ -376,15 +376,6 @@ export function TradeFormModal({
                         className={inputClass}
                       />
                     </Field>
-                    <Field label="Label">
-                      <input
-                        type="text"
-                        placeholder="e.g. lossA, Art1c"
-                        value={form.premiumLabel}
-                        onChange={(e) => setForm((f) => ({ ...f, premiumLabel: e.target.value }))}
-                        className={inputClass}
-                      />
-                    </Field>
                     <Field label="Reset balance to">
                       <input
                         type="number"
@@ -406,14 +397,6 @@ export function TradeFormModal({
                         step="any"
                         value={form.speedPnl}
                         onChange={(e) => setForm((f) => ({ ...f, speedPnl: e.target.value }))}
-                        className={inputClass}
-                      />
-                    </Field>
-                    <Field label="Label">
-                      <input
-                        type="text"
-                        value={form.speedLabel}
-                        onChange={(e) => setForm((f) => ({ ...f, speedLabel: e.target.value }))}
                         className={inputClass}
                       />
                     </Field>

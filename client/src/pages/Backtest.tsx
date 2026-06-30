@@ -122,6 +122,19 @@ function SectionHeader({
 
 const fmtPct = (n: number) => `${(n * 100).toFixed(1)}%`;
 
+// Sample-size opacity ramp for the timing charts. Buckets with very few
+// trades shouldn't visually compete with buckets that have many — a 100%
+// WR built from 4 trades is much weaker evidence than 80% from 100. Steps
+// of 15% so each tier is distinguishable on the dark theme.
+function opacityForCount(n: number): number {
+  if (n >= 110) return 1.0;
+  if (n >= 90) return 0.85;
+  if (n >= 70) return 0.7;
+  if (n >= 50) return 0.55;
+  if (n >= 30) return 0.4;
+  return 0.25;
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -957,7 +970,7 @@ function TimingTab({
         <SectionHeader
           icon={Clock}
           title="Performance by hour of day"
-          hint="Win rate per hour. Trade volume shown in tooltip and below."
+          hint="Bar opacity reflects sample size — faded bars have few trades, so trust them less."
         />
         <Card className="bg-card/60">
           <CardContent className="pt-4">
@@ -992,7 +1005,11 @@ function TimingTab({
                 />
                 <Bar dataKey="winRate" name="Win Rate" fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={48} isAnimationActive={false}>
                   {hourData.map((d, i) => (
-                    <Cell key={i} fill={d.winRate >= 80 ? "#22c55e" : d.winRate >= 65 ? "#a3e635" : "#ef4444"} fillOpacity={0.9} />
+                    <Cell
+                      key={i}
+                      fill={d.winRate >= 80 ? "#22c55e" : d.winRate >= 65 ? "#a3e635" : "#ef4444"}
+                      fillOpacity={opacityForCount(d.trades)}
+                    />
                   ))}
                 </Bar>
               </BarChart>
@@ -1013,7 +1030,7 @@ function TimingTab({
         <SectionHeader
           icon={BarChart2}
           title="Performance by intraday trade number"
-          hint="T1 = first signal of the day, T2 = second, etc. Long vs short overlay."
+          hint="T1 = first signal of the day, T2 = second, etc. Bar opacity reflects sample size."
         />
         <Card className="bg-card/60">
           <CardContent className="pt-4">
@@ -1048,9 +1065,21 @@ function TimingTab({
                     ) : null
                   }
                 />
-                <Bar dataKey="winRate" name="WR" fill="#a3e635" fillOpacity={0.9} radius={[3, 3, 0, 0]} maxBarSize={20} isAnimationActive={false} />
-                <Bar dataKey="lwr" name="Long WR" fill="#22c55e" fillOpacity={0.75} radius={[3, 3, 0, 0]} maxBarSize={20} isAnimationActive={false} />
-                <Bar dataKey="swr" name="Short WR" fill="#38bdf8" fillOpacity={0.75} radius={[3, 3, 0, 0]} maxBarSize={20} isAnimationActive={false} />
+                <Bar dataKey="winRate" name="WR" fill="#a3e635" radius={[3, 3, 0, 0]} maxBarSize={20} isAnimationActive={false}>
+                  {tradeNoData.map((d, i) => (
+                    <Cell key={`wr-${i}`} fill="#a3e635" fillOpacity={opacityForCount(d.count)} />
+                  ))}
+                </Bar>
+                <Bar dataKey="lwr" name="Long WR" fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={20} isAnimationActive={false}>
+                  {tradeNoData.map((d, i) => (
+                    <Cell key={`lwr-${i}`} fill="#22c55e" fillOpacity={opacityForCount(d.count) * 0.85} />
+                  ))}
+                </Bar>
+                <Bar dataKey="swr" name="Short WR" fill="#38bdf8" radius={[3, 3, 0, 0]} maxBarSize={20} isAnimationActive={false}>
+                  {tradeNoData.map((d, i) => (
+                    <Cell key={`swr-${i}`} fill="#38bdf8" fillOpacity={opacityForCount(d.count) * 0.85} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -1208,9 +1237,6 @@ function ScalingTab({
         colorA="#38bdf8"
         onOpenSettings={onOpenSettings}
       />
-
-      {/* Milestone (loss / recovery) events from both series */}
-      <MilestoneTable premium={premium} speed={speed} />
     </div>
   );
 }
@@ -1325,9 +1351,6 @@ function ScalingChart({
                         {p.pnl >= 0 ? "+" : ""}
                         {formatCurrency(p.pnl)}
                       </p>
-                      {p.label && (
-                        <p className="text-xs text-amber-300 mt-1">{p.label}</p>
-                      )}
                     </div>
                   );
                 }}
@@ -1392,108 +1415,6 @@ function ScalingChart({
   );
 }
 
-function MilestoneTable({
-  premium,
-  speed,
-}: {
-  premium: ReturnType<typeof computeScaling>;
-  speed: ReturnType<typeof computeScaling>;
-}) {
-  // Merge milestones by index so the Premium/Speed labels show side-by-side.
-  type Row = {
-    index: number;
-    date: string;
-    premiumLabel: string | null;
-    premiumBalance: number | null;
-    speedLabel: string | null;
-    speedBalance: number | null;
-  };
-  const rows: Row[] = [];
-  const max = Math.max(premium.points.length, speed.points.length);
-  for (let i = 0; i < max; i++) {
-    const p = premium.points[i];
-    const s = speed.points[i];
-    if (!p?.isMilestone && !s?.isMilestone) continue;
-    rows.push({
-      index: p?.index ?? s!.index,
-      date: p?.date ?? s!.date,
-      premiumLabel: p?.label ?? null,
-      premiumBalance: p?.balance ?? null,
-      speedLabel: s?.label ?? null,
-      speedBalance: s?.balance ?? null,
-    });
-  }
-
-  return (
-    <section className="space-y-3">
-      <SectionHeader icon={Activity} title="Milestone events" hint="Labeled loss/recovery markers from both series." />
-      <Card className="bg-card/60">
-        <CardContent className="pt-4">
-          {rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-6 text-center">No labeled events in this dataset.</p>
-          ) : (
-            <div className="overflow-hidden rounded-md border border-border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2 text-left">#</th>
-                    <th className="px-3 py-2 text-left">Date</th>
-                    <th className="px-3 py-2 text-left">Premium</th>
-                    <th className="px-3 py-2 text-right">Premium balance</th>
-                    <th className="px-3 py-2 text-left">Speed</th>
-                    <th className="px-3 py-2 text-right">Speed balance</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.index} className="border-t border-border/40">
-                      <td className="px-3 py-2 text-muted-foreground">#{r.index}</td>
-                      <td className="px-3 py-2">{r.date}</td>
-                      <td className="px-3 py-2">
-                        {r.premiumLabel && (
-                          <span
-                            className={cn(
-                              "rounded px-1.5 py-0.5 text-xs font-medium",
-                              /loss/i.test(r.premiumLabel)
-                                ? "bg-red-500/15 text-red-300"
-                                : "bg-emerald-500/15 text-emerald-300",
-                            )}
-                          >
-                            {r.premiumLabel}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-right font-medium">
-                        {r.premiumBalance != null ? formatCurrency(r.premiumBalance) : "—"}
-                      </td>
-                      <td className="px-3 py-2">
-                        {r.speedLabel && (
-                          <span
-                            className={cn(
-                              "rounded px-1.5 py-0.5 text-xs font-medium",
-                              /loss/i.test(r.speedLabel)
-                                ? "bg-red-500/15 text-red-300"
-                                : "bg-sky-500/15 text-sky-300",
-                            )}
-                          >
-                            {r.speedLabel}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-right font-medium">
-                        {r.speedBalance != null ? formatCurrency(r.speedBalance) : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </section>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Trade Log tab
