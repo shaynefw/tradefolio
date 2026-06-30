@@ -905,6 +905,12 @@ function ScalingSummary({
             <p className={cn("font-semibold", pnlColor(series.netPnl))}>
               {positive ? "+" : ""}
               {formatCurrency(series.netPnl)}
+              {series.start > 0 && (
+                <span className="ml-1.5 text-xs opacity-80">
+                  ({series.netPnl >= 0 ? "+" : ""}
+                  {((series.netPnl / series.start) * 100).toFixed(1)}%)
+                </span>
+              )}
             </p>
           </div>
           <div>
@@ -1390,6 +1396,12 @@ function ScalingChart({
               <p className={cn("font-semibold", pnlColor(series.netPnl))}>
                 {series.netPnl >= 0 ? "+" : ""}
                 {formatCurrency(series.netPnl)}
+                {series.start > 0 && (
+                  <span className="ml-1.5 text-xs opacity-80">
+                    ({series.netPnl >= 0 ? "+" : ""}
+                    {((series.netPnl / series.start) * 100).toFixed(1)}%)
+                  </span>
+                )}
               </p>
             </div>
             <div>
