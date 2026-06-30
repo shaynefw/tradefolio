@@ -106,6 +106,8 @@ const datasetRouter = router({
         takeProfitBricks: schema.backtestDatasets.takeProfitBricks,
         premiumStartBalance: schema.backtestDatasets.premiumStartBalance,
         speedStartBalance: schema.backtestDatasets.speedStartBalance,
+        notes: schema.backtestDatasets.notes,
+        rrBuckets: schema.backtestDatasets.rrBuckets,
         createdAt: schema.backtestDatasets.createdAt,
         updatedAt: schema.backtestDatasets.updatedAt,
         // Subquery counted via raw SQL — drizzle's sql template wasn't
@@ -127,6 +129,8 @@ const datasetRouter = router({
         takeProfitBricks: z.number().int().positive().default(2),
         premiumStartBalance: z.number().nullable().optional(),
         speedStartBalance: z.number().nullable().optional(),
+        notes: z.string().nullable().optional(),
+        rrBuckets: z.string().nullable().optional(),
         // Optional seed trades — used by "Load MNQ sample" flow. The whole
         // create-and-seed runs in one transaction so partial failures don't
         // leave an empty dataset around.
@@ -145,6 +149,8 @@ const datasetRouter = router({
             takeProfitBricks: input.takeProfitBricks,
             premiumStartBalance: input.premiumStartBalance ?? null,
             speedStartBalance: input.speedStartBalance ?? null,
+            notes: input.notes ?? null,
+            rrBuckets: input.rrBuckets ?? null,
           })
           .returning();
         if (input.seedTrades && input.seedTrades.length > 0) {
@@ -169,6 +175,8 @@ const datasetRouter = router({
         takeProfitBricks: z.number().int().positive().optional(),
         premiumStartBalance: z.number().nullable().optional(),
         speedStartBalance: z.number().nullable().optional(),
+        notes: z.string().nullable().optional(),
+        rrBuckets: z.string().nullable().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {

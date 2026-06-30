@@ -63,5 +63,16 @@ export interface BacktestDataset {
   // scaling isn't being tracked for this dataset.
   premiumStartBalance: number | null;
   speedStartBalance: number | null;
+  // Free-form notes the user keeps about how this backtest is tracked.
+  notes: string | null;
+  // User-customized RR buckets. Null = fall back to the default 1:NRR
+  // ladder. Each bucket holds the take-profit and stop thresholds in
+  // points; RR is derived as tpPoints / stopPoints.
+  rrBuckets: RrBucketConfig[] | null;
   trades: BacktestTrade[];
+}
+
+export interface RrBucketConfig {
+  tpPoints: number;
+  stopPoints: number;
 }

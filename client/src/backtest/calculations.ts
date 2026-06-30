@@ -272,32 +272,59 @@ export function computeByTradeNo(ds: BacktestDataset): TradeNoBucket[] {
 // ---------------------------------------------------------------------------
 
 export interface RrBucket {
-  r: number;       // 1..5
-  label: string;   // "1:1RR"
-  tradeCount: number; // trades whose MFE met or exceeded N × stop
+  ratio: number;      // tpPoints / stopPoints (e.g. 1, 2, 3 → "1:1RR", "1:2RR")
+  label: string;      // "1:2RR" — formatted from the ratio
+  tpPoints: number;
+  stopPoints: number;
+  tradeCount: number; // trades whose MFE met or exceeded tpPoints
   winRate: number;    // tradeCount / total valid
   ez: number;         // 1 − winRate
+}
+
+// Formats a numeric ratio as "1:N" — uses up to 2 decimals so user-chosen
+// ratios like 2.5 still display readably.
+function formatRrLabel(ratio: number): string {
+  if (!Number.isFinite(ratio) || ratio <= 0) return "—";
+  const rounded = Math.abs(ratio - Math.round(ratio)) < 0.005
+    ? String(Math.round(ratio))
+    : ratio.toFixed(2).replace(/\.?0+$/, "");
+  return `1:${rounded}RR`;
+}
+
+// Default ladder when the dataset hasn't customized buckets: the original
+// fixed 1:NRR rows where the target = N × stop_size_in_points.
+function defaultRrBuckets(ds: BacktestDataset) {
+  const stopPoints = ds.stopBricks * ds.brickPoints;
+  return Array.from({ length: 5 }, (_, i) => ({
+    tpPoints: (i + 1) * stopPoints,
+    stopPoints,
+  }));
 }
 
 export function computeRrBuckets(ds: BacktestDataset): RrBucket[] {
   const valid = ds.trades.filter((t) => t.validEntry);
   const denom = valid.length;
-  const stopPoints = ds.stopBricks * ds.brickPoints;
-  const buckets: RrBucket[] = [];
+  const configs =
+    ds.rrBuckets && ds.rrBuckets.length > 0
+      ? ds.rrBuckets
+      : defaultRrBuckets(ds);
 
-  for (let r = 1; r <= 5; r++) {
-    const thresh = r * stopPoints;
-    const tradeCount = valid.filter((t) => (t.mfe ?? -Infinity) >= thresh).length;
+  return configs.map((c) => {
+    const tradeCount = valid.filter(
+      (t) => (t.mfe ?? -Infinity) >= c.tpPoints,
+    ).length;
     const winRate = denom > 0 ? tradeCount / denom : 0;
-    buckets.push({
-      r,
-      label: `1:${r}RR`,
+    const ratio = c.stopPoints > 0 ? c.tpPoints / c.stopPoints : 0;
+    return {
+      ratio,
+      label: formatRrLabel(ratio),
+      tpPoints: c.tpPoints,
+      stopPoints: c.stopPoints,
       tradeCount,
       winRate,
       ez: 1 - winRate,
-    });
-  }
-  return buckets;
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------

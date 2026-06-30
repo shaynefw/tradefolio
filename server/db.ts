@@ -150,6 +150,8 @@ export async function initDb() {
     "is_pending",
     "INTEGER NOT NULL DEFAULT 0",
   );
+  await addColumnIfMissing("backtest_datasets", "notes", "TEXT");
+  await addColumnIfMissing("backtest_datasets", "rr_buckets", "TEXT");
 }
 
 async function addColumnIfMissing(

@@ -124,6 +124,13 @@ export const backtestDatasets = sqliteTable("backtest_datasets", {
   // resets); when null, that scaling is considered "not tracked".
   premiumStartBalance: real("premium_start_balance"),
   speedStartBalance: real("speed_start_balance"),
+  // Free-form notes the user keeps about how this backtest is being
+  // tracked — rules, entry criteria, special conventions, etc.
+  notes: text("notes"),
+  // User-customized RR buckets for the Timing tab's RR-bucket-reach table.
+  // Stored as a JSON array of { tpPoints, stopPoints }; null falls back to
+  // the default 1:NRR ladder (tpPoints = N × stopBricks × brickPoints).
+  rrBuckets: text("rr_buckets"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .default(sql`(unixepoch() * 1000)`)
     .notNull(),

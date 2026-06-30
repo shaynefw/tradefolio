@@ -72,7 +72,7 @@ import {
   computeRrBuckets,
   computeScaling,
 } from "../backtest/calculations";
-import type { BacktestDataset } from "../backtest/types";
+import type { BacktestDataset, RrBucketConfig } from "../backtest/types";
 
 // ---------------------------------------------------------------------------
 // Small primitives — kept local so the Analytics page's StatCard layout stays
@@ -352,7 +352,7 @@ export default function Backtest() {
                 type="button"
                 onClick={() => setScalingSettingsOpen(true)}
                 disabled={!activeMeta}
-                title="Scaling settings"
+                title="Dataset settings (scaling, notes, RR buckets)"
                 className="rounded-md border border-border bg-card/60 p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
               >
                 <Wallet className="h-3.5 w-3.5" />
@@ -412,6 +412,18 @@ export default function Backtest() {
           </div>
         )}
 
+        {/* Notes panel — only when this dataset has notes saved */}
+        {ds?.notes && ds.notes.trim() !== "" && (
+          <div className="rounded-md border border-border bg-card/40 p-3 text-sm">
+            <p className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">
+              Notes / rules
+            </p>
+            <p className="whitespace-pre-wrap text-foreground/85">
+              {ds.notes}
+            </p>
+          </div>
+        )}
+
         {/* Dataset delete confirmation */}
         <AlertDialog
           open={pendingDatasetDelete != null}
@@ -457,15 +469,19 @@ export default function Backtest() {
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* Scaling settings dialog */}
+        {/* Dataset settings dialog (scaling, notes, RR buckets) */}
         {activeMeta && (
-          <ScalingSettingsDialog
+          <DatasetSettingsDialog
             open={scalingSettingsOpen}
             onOpenChange={setScalingSettingsOpen}
             datasetId={activeMeta.id}
+            stopBricks={activeMeta.stopBricks}
+            brickPoints={activeMeta.brickPoints}
             initial={{
               premiumStartBalance: activeMeta.premiumStartBalance ?? null,
               speedStartBalance: activeMeta.speedStartBalance ?? null,
+              notes: activeMeta.notes ?? null,
+              rrBuckets: ds?.rrBuckets ?? null,
             }}
           />
         )}
@@ -579,54 +595,82 @@ interface DatasetSelectorProps {
 }
 
 // ---------------------------------------------------------------------------
-// Scaling settings dialog — set the starting balance for Premium / Speed.
-// Empty string saves as null = "stop tracking this scaling".
+// Dataset settings dialog — one place for scaling starting balances, notes,
+// and RR-bucket configuration. Empty starting-balance fields save as null,
+// disabling that scaling's tracking. Empty notes save as null. RR buckets
+// save as a JSON array (or null for the default ladder).
 // ---------------------------------------------------------------------------
 
-function ScalingSettingsDialog({
+interface DatasetSettingsInitial {
+  premiumStartBalance: number | null;
+  speedStartBalance: number | null;
+  notes: string | null;
+  rrBuckets: RrBucketConfig[] | null;
+}
+
+type RrRow = { tp: string; stop: string };
+
+function defaultLadder(stopBricks: number, brickPoints: number): RrRow[] {
+  const stopPoints = stopBricks * brickPoints;
+  return Array.from({ length: 5 }, (_, i) => ({
+    tp: String((i + 1) * stopPoints),
+    stop: String(stopPoints),
+  }));
+}
+
+function DatasetSettingsDialog({
   open,
   onOpenChange,
   datasetId,
+  stopBricks,
+  brickPoints,
   initial,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   datasetId: number;
-  initial: {
-    premiumStartBalance: number | null;
-    speedStartBalance: number | null;
-  };
+  stopBricks: number;
+  brickPoints: number;
+  initial: DatasetSettingsInitial;
 }) {
   const utils = trpc.useUtils();
-  const [premium, setPremium] = useState(
-    initial.premiumStartBalance == null
-      ? ""
-      : String(initial.premiumStartBalance),
-  );
-  const [speed, setSpeed] = useState(
-    initial.speedStartBalance == null ? "" : String(initial.speedStartBalance),
-  );
+  const [premium, setPremium] = useState("");
+  const [speed, setSpeed] = useState("");
+  const [notes, setNotes] = useState("");
+  const [rrRows, setRrRows] = useState<RrRow[]>([]);
 
-  // Re-sync when the underlying dataset changes (e.g. user switches datasets
-  // while the dialog is open or after a save).
+  // Re-sync when opened (or the underlying dataset switches).
   useEffect(() => {
     if (!open) return;
     setPremium(
-      initial.premiumStartBalance == null
-        ? ""
-        : String(initial.premiumStartBalance),
+      initial.premiumStartBalance == null ? "" : String(initial.premiumStartBalance),
     );
     setSpeed(
-      initial.speedStartBalance == null
-        ? ""
-        : String(initial.speedStartBalance),
+      initial.speedStartBalance == null ? "" : String(initial.speedStartBalance),
     );
-  }, [open, initial.premiumStartBalance, initial.speedStartBalance]);
+    setNotes(initial.notes ?? "");
+    setRrRows(
+      initial.rrBuckets && initial.rrBuckets.length > 0
+        ? initial.rrBuckets.map((b) => ({
+            tp: String(b.tpPoints),
+            stop: String(b.stopPoints),
+          }))
+        : defaultLadder(stopBricks, brickPoints),
+    );
+  }, [
+    open,
+    initial.premiumStartBalance,
+    initial.speedStartBalance,
+    initial.notes,
+    initial.rrBuckets,
+    stopBricks,
+    brickPoints,
+  ]);
 
   const mutation = trpc.backtest.dataset.update.useMutation({
     onSuccess: () => {
       utils.backtest.dataset.list.invalidate();
-      toast.success("Scaling settings saved");
+      toast.success("Dataset settings saved");
       onOpenChange(false);
     },
     onError: (err) => toast.error(err.message ?? "Failed to save"),
@@ -641,50 +685,201 @@ function ScalingSettingsDialog({
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    // Validate & shape RR buckets. Drop any incomplete rows; if the list
+    // matches the default ladder exactly, save null so the dataset falls
+    // back to dynamic defaults if stop/brick later change.
+    const cleanRr: RrBucketConfig[] = [];
+    for (const r of rrRows) {
+      const tp = Number(r.tp);
+      const stop = Number(r.stop);
+      if (Number.isFinite(tp) && Number.isFinite(stop) && tp > 0 && stop > 0) {
+        cleanRr.push({ tpPoints: tp, stopPoints: stop });
+      }
+    }
+    const defaults = defaultLadder(stopBricks, brickPoints);
+    const matchesDefault =
+      cleanRr.length === defaults.length &&
+      cleanRr.every(
+        (b, i) =>
+          String(b.tpPoints) === defaults[i].tp &&
+          String(b.stopPoints) === defaults[i].stop,
+      );
     mutation.mutate({
       id: datasetId,
       premiumStartBalance: parseDollar(premium),
       speedStartBalance: parseDollar(speed),
+      notes: notes.trim() === "" ? null : notes.trim(),
+      rrBuckets:
+        matchesDefault || cleanRr.length === 0
+          ? null
+          : JSON.stringify(cleanRr),
     });
   }
 
+  const addBucket = () =>
+    setRrRows((rs) => [...rs, { tp: "", stop: String(stopBricks * brickPoints) }]);
+  const removeBucket = (i: number) =>
+    setRrRows((rs) => rs.filter((_, idx) => idx !== i));
+  const updateBucket = (i: number, patch: Partial<RrRow>) =>
+    setRrRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const resetToDefault = () =>
+    setRrRows(defaultLadder(stopBricks, brickPoints));
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md bg-card">
+      <DialogContent className="max-w-2xl bg-card max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Scaling settings</DialogTitle>
+          <DialogTitle>Dataset settings</DialogTitle>
           <DialogDescription>
-            Set a starting balance for each scaling. Balances auto-update as
-            you add trades. Leave blank to stop tracking that scaling.
+            Scaling starting balances, free-form notes, and custom RR
+            buckets — all in one place.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSave} className="space-y-4">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs uppercase tracking-wider text-muted-foreground">
-              Premium starting balance
-            </span>
-            <input
-              type="number"
-              step="any"
-              placeholder="$10,000"
-              value={premium}
-              onChange={(e) => setPremium(e.target.value)}
-              className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+        <form onSubmit={handleSave} className="space-y-6">
+          {/* Scaling */}
+          <section className="space-y-2">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">
+              Scaling starting balances
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted-foreground">Premium</span>
+                <input
+                  type="number"
+                  step="any"
+                  placeholder="$10,000 (blank = not tracked)"
+                  value={premium}
+                  onChange={(e) => setPremium(e.target.value)}
+                  className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted-foreground">Speed</span>
+                <input
+                  type="number"
+                  step="any"
+                  placeholder="$3,000 (blank = not tracked)"
+                  value={speed}
+                  onChange={(e) => setSpeed(e.target.value)}
+                  className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </label>
+            </div>
+          </section>
+
+          {/* Notes */}
+          <section className="space-y-2">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">
+              Notes / rules
+            </p>
+            <textarea
+              rows={4}
+              placeholder="Document the rules you're using to track this backtest — entry criteria, exit rules, sizing conventions, etc."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
             />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs uppercase tracking-wider text-muted-foreground">
-              Speed starting balance
-            </span>
-            <input
-              type="number"
-              step="any"
-              placeholder="$3,000"
-              value={speed}
-              onChange={(e) => setSpeed(e.target.value)}
-              className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-          </label>
+          </section>
+
+          {/* RR buckets */}
+          <section className="space-y-2">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                RR buckets
+              </p>
+              <button
+                type="button"
+                onClick={resetToDefault}
+                className="text-[10px] text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+              >
+                Reset to default ladder
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Each row defines a TP / Stop pair (in points). RR is computed as
+              TP ÷ Stop and WR/Ez$/Trades populate from your trade data.
+            </p>
+            <div className="overflow-hidden rounded-md border border-border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 text-right">TP (pts)</th>
+                    <th className="px-3 py-2 text-right">Stop (pts)</th>
+                    <th className="px-3 py-2 text-right">RR</th>
+                    <th className="px-3 py-2 text-right w-12"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rrRows.map((r, i) => {
+                    const tpNum = Number(r.tp);
+                    const stopNum = Number(r.stop);
+                    const ratio =
+                      Number.isFinite(tpNum) &&
+                      Number.isFinite(stopNum) &&
+                      stopNum > 0
+                        ? tpNum / stopNum
+                        : null;
+                    const ratioLabel =
+                      ratio == null
+                        ? "—"
+                        : `1:${
+                            Math.abs(ratio - Math.round(ratio)) < 0.005
+                              ? Math.round(ratio)
+                              : ratio.toFixed(2).replace(/\.?0+$/, "")
+                          }`;
+                    return (
+                      <tr key={i} className="border-t border-border/40">
+                        <td className="px-2 py-1.5">
+                          <input
+                            type="number"
+                            step="any"
+                            min={1}
+                            value={r.tp}
+                            onChange={(e) => updateBucket(i, { tp: e.target.value })}
+                            className="h-8 w-full rounded border border-border bg-background px-2 text-right text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+                          />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <input
+                            type="number"
+                            step="any"
+                            min={1}
+                            value={r.stop}
+                            onChange={(e) => updateBucket(i, { stop: e.target.value })}
+                            className="h-8 w-full rounded border border-border bg-background px-2 text-right text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+                          />
+                        </td>
+                        <td className="px-3 py-1.5 text-right font-medium tabular-nums">
+                          {ratioLabel}
+                        </td>
+                        <td className="px-2 py-1.5 text-right">
+                          <button
+                            type="button"
+                            onClick={() => removeBucket(i)}
+                            title="Remove bucket"
+                            className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive-foreground"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={addBucket}
+              className="gap-1.5"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add bucket
+            </Button>
+          </section>
+
           <DialogFooter className="gap-2 pt-2">
             <Button
               type="button"
@@ -695,7 +890,7 @@ function ScalingSettingsDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "Saving…" : "Save"}
+              {mutation.isPending ? "Saving…" : "Save settings"}
             </Button>
           </DialogFooter>
         </form>
@@ -1182,7 +1377,7 @@ function TimingTab({
           <SectionHeader
             icon={Layers}
             title="RR-bucket reach"
-            hint={`Threshold = N × stop (${dsStopPoints} pts).`}
+            hint="RR = TP ÷ Stop. WR = trades whose MFE reached TP. Customize buckets in Dataset settings."
           />
           <Card className="bg-card/60">
             <CardContent className="pt-5 pb-5">
@@ -1191,15 +1386,19 @@ function TimingTab({
                   <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
                     <tr>
                       <th className="px-3 py-2 text-left">RR</th>
+                      <th className="px-3 py-2 text-right">TP (pts)</th>
+                      <th className="px-3 py-2 text-right">Stop (pts)</th>
                       <th className="px-3 py-2 text-right">WR</th>
                       <th className="px-3 py-2 text-right">Ez$</th>
                       <th className="px-3 py-2 text-right">Trades</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rr.map((r) => (
-                      <tr key={r.r} className="border-t border-border/40">
+                    {rr.map((r, i) => (
+                      <tr key={`${r.tpPoints}-${r.stopPoints}-${i}`} className="border-t border-border/40">
                         <td className="px-3 py-2 font-medium">{r.label}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{r.tpPoints}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{r.stopPoints}</td>
                         <td className="px-3 py-2 text-right text-green-400 font-semibold">{fmtPct(r.winRate)}</td>
                         <td className="px-3 py-2 text-right text-muted-foreground">{fmtPct(r.ez)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{r.tradeCount}</td>
@@ -1208,10 +1407,6 @@ function TimingTab({
                   </tbody>
                 </table>
               </div>
-              <p className="mt-3 text-xs text-muted-foreground">
-                WR = trades whose MFE reached the 1:N target. Ez$ = 1 − WR — the
-                share of "easy" exits that didn't push to N × stop.
-              </p>
             </CardContent>
           </Card>
         </section>

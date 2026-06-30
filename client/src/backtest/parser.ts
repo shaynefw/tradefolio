@@ -237,6 +237,8 @@ export function parseBacktestCsv(
     takeProfitBricks: opts.takeProfitBricks ?? 2,
     premiumStartBalance,
     speedStartBalance,
+    notes: null,
+    rrBuckets: null,
     trades,
   };
 }

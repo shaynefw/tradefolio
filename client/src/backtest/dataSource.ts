@@ -11,6 +11,7 @@ import type {
   BacktestDataset,
   BacktestTrade,
   RecoveryStage,
+  RrBucketConfig,
   Side,
 } from "./types";
 
@@ -101,6 +102,8 @@ export interface ServerDatasetMeta {
   takeProfitBricks: number;
   premiumStartBalance: number | null;
   speedStartBalance: number | null;
+  notes: string | null;
+  rrBuckets: string | null; // JSON string of RrBucketConfig[]
 }
 
 // What backtest.trade.list returns per row.
@@ -188,6 +191,30 @@ export function serverRowToBacktestTrade(
   };
 }
 
+function parseRrBuckets(raw: string | null): RrBucketConfig[] | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    const out: RrBucketConfig[] = [];
+    for (const item of parsed) {
+      if (
+        item &&
+        typeof item === "object" &&
+        typeof (item as { tpPoints?: unknown }).tpPoints === "number" &&
+        typeof (item as { stopPoints?: unknown }).stopPoints === "number"
+      ) {
+        const tp = (item as { tpPoints: number }).tpPoints;
+        const stop = (item as { stopPoints: number }).stopPoints;
+        if (tp > 0 && stop > 0) out.push({ tpPoints: tp, stopPoints: stop });
+      }
+    }
+    return out.length > 0 ? out : null;
+  } catch {
+    return null;
+  }
+}
+
 export function buildDatasetFromServer(
   meta: ServerDatasetMeta,
   rows: ServerTradeRow[],
@@ -201,6 +228,8 @@ export function buildDatasetFromServer(
     takeProfitBricks: meta.takeProfitBricks,
     premiumStartBalance: meta.premiumStartBalance,
     speedStartBalance: meta.speedStartBalance,
+    notes: meta.notes,
+    rrBuckets: parseRrBuckets(meta.rrBuckets),
     trades: rows.map(serverRowToBacktestTrade),
   };
 }
