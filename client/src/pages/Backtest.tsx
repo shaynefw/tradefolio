@@ -62,7 +62,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../components/ui/dialog";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, StickyNote, Trash2 } from "lucide-react";
 import {
   computeByHour,
   computeBySide,
@@ -2070,7 +2070,20 @@ function TradeLogTab({
                         {t.side}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">T{t.tradeNo}</td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      <span className="inline-flex items-center gap-1.5">
+                        T{t.tradeNo}
+                        {t.notes && t.notes.trim() !== "" && (
+                          <span
+                            className="inline-flex shrink-0 text-amber-300/80"
+                            title={t.notes}
+                            aria-label="This trade has a note"
+                          >
+                            <StickyNote className="h-3 w-3" />
+                          </span>
+                        )}
+                      </span>
+                    </td>
                     <td className="px-3 py-2 text-right tabular-nums">{t.mae ?? "—"}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{t.mfe ?? "—"}</td>
                     <td className="px-3 py-2">
