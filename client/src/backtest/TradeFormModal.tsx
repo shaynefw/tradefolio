@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
@@ -139,6 +139,9 @@ interface TradeFormModalProps {
   // trade with their balance in view.
   premiumSeries: ScalingSeries;
   speedSeries: ScalingSeries;
+  // Full trade list — used to auto-suggest the trade # for a new trade
+  // based on how many trades already sit on the selected date.
+  existingTrades: BacktestTrade[];
 }
 
 export function TradeFormModal({
@@ -148,10 +151,32 @@ export function TradeFormModal({
   editingTrade,
   premiumSeries,
   speedSeries,
+  existingTrades,
 }: TradeFormModalProps) {
   const isEdit = editingTrade?.id != null;
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // How many trades already sit on the selected date. Pending placeholders
+  // are excluded — their tradeNo is 0 and they don't represent real trades
+  // yet. Editing an existing trade also excludes itself so the count
+  // reflects "other trades on this date".
+  const { countOnDate, suggestedTradeNo } = useMemo(() => {
+    if (!form.date) return { countOnDate: 0, suggestedTradeNo: 1 };
+    const target = new Date(`${form.date}T00:00:00`).getTime();
+    let count = 0;
+    let max = 0;
+    for (const t of existingTrades) {
+      if (t.isPending) continue;
+      if (isEdit && t.id != null && t.id === editingTrade?.id) continue;
+      const midnight = new Date(t.date);
+      midnight.setHours(0, 0, 0, 0);
+      if (midnight.getTime() !== target) continue;
+      count++;
+      if (t.tradeNo > max) max = t.tradeNo;
+    }
+    return { countOnDate: count, suggestedTradeNo: max + 1 };
+  }, [existingTrades, form.date, isEdit, editingTrade?.id]);
 
   // Reset form whenever the modal opens / the editing target changes.
   useEffect(() => {
@@ -165,6 +190,14 @@ export function TradeFormModal({
           editingTrade.speedResetBalance != null),
     );
   }, [open, editingTrade]);
+
+  // When adding, keep the trade # in sync with the "next slot for this
+  // date" any time the date changes. Skips edit mode entirely so the
+  // user's existing value isn't clobbered.
+  useEffect(() => {
+    if (!open || isEdit) return;
+    setForm((f) => ({ ...f, tradeNo: String(suggestedTradeNo) }));
+  }, [open, isEdit, suggestedTradeNo]);
 
   const utils = trpc.useUtils();
 
@@ -358,6 +391,11 @@ export function TradeFormModal({
                 onChange={(e) => setForm((f) => ({ ...f, tradeNo: e.target.value }))}
                 className={inputClass}
               />
+              <span className="text-[10px] text-muted-foreground">
+                {countOnDate === 0
+                  ? "First trade on this date"
+                  : `${countOnDate} trade${countOnDate === 1 ? "" : "s"} already on this date`}
+              </span>
             </Field>
           </div>
 

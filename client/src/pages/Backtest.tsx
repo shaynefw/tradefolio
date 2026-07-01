@@ -2170,6 +2170,7 @@ function TradeLogTab({
           }}
           premiumSeries={premiumSeries}
           speedSeries={speedSeries}
+          existingTrades={dataset.trades}
           datasetId={datasetId}
           editingTrade={editingTrade}
         />
