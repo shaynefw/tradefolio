@@ -185,6 +185,7 @@ export function serverRowToBacktestTrade(
         : null,
     premiumResetBalance: row.premiumResetBalance,
     speedResetBalance: row.speedResetBalance,
+    notes: row.notes,
     isPending: row.isPending,
     winStreakAt: null,
     lossStreakAt: null,

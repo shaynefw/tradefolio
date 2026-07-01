@@ -98,7 +98,7 @@ function tradeToForm(t: BacktestTrade): FormState {
     speedLabel: t.speed?.label ?? "",
     speedResetBalance:
       t.speedResetBalance == null ? "" : String(t.speedResetBalance),
-    notes: "",
+    notes: t.notes ?? "",
     isPending: t.isPending,
     pendingStage:
       t.recoveryStage === "second"

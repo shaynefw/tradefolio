@@ -45,6 +45,8 @@ export interface BacktestTrade {
   // trade's pnl — used by the user to recover from a blown account.
   premiumResetBalance: number | null;
   speedResetBalance: number | null;
+  // Free-form per-trade notes.
+  notes: string | null;
   // running streak counters as written by the source spreadsheet; only valid
   // for "YES" trades. Kept so we can prefer source-of-truth over recompute.
   winStreakAt: number | null;

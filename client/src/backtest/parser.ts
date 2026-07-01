@@ -182,6 +182,7 @@ function rowToTrade(row: string[], index: number): BacktestTrade | null {
     speed,
     premiumResetBalance: null,
     speedResetBalance: null,
+    notes: null,
     isPending: false,
     winStreakAt,
     lossStreakAt,
