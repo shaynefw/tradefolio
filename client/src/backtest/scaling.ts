@@ -44,7 +44,10 @@ export function findCurrentLevel(
     if (balance >= lvl.recommendedBalance) current = lvl;
     else break;
   }
-  return current;
+  // Fall back to the first level when balance is below the ladder — the
+  // user is still trading at "starter" sizing while working toward the
+  // first threshold.
+  return current ?? sorted[0];
 }
 
 // PnL the strategy prescribes for this outcome + recovery combo, given the

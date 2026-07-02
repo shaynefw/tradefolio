@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
-import { router, publicProcedure } from "../trpc.js";
+import { router, publicProcedure, protectedProcedure } from "../trpc.js";
 import { db, schema } from "../db.js";
 import {
   hashPassword,
@@ -126,4 +126,35 @@ export const authRouter = router({
     clearSessionCookie(ctx.res);
     return { ok: true };
   }),
+
+  changePassword: protectedProcedure
+    .input(
+      z.object({
+        currentPassword: z.string().min(1),
+        newPassword: z.string().min(8),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [user] = await db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.id, ctx.user.id))
+        .limit(1);
+      if (!user) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+      const valid = await verifyPassword(input.currentPassword, user.passwordHash);
+      if (!valid) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Current password is incorrect",
+        });
+      }
+      const passwordHash = await hashPassword(input.newPassword);
+      await db
+        .update(schema.users)
+        .set({ passwordHash, updatedAt: new Date() })
+        .where(eq(schema.users.id, ctx.user.id));
+      return { ok: true };
+    }),
 });

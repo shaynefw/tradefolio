@@ -124,7 +124,9 @@ function findLevel(
     if (balance >= lvl.recommendedBalance) current = lvl;
     else break;
   }
-  return current;
+  // Fall back to first level when below the ladder — user is at starter
+  // sizing while working toward the first threshold.
+  return current ?? sorted[0] ?? null;
 }
 
 // Prescribed PnL for this outcome + recovery combo given the running
@@ -369,7 +371,9 @@ const datasetRouter = router({
             updatedAt?: Date;
           } = {};
 
-          if (premiumSchedule && t.premiumPnl == null) {
+          // Treat 0 as "still blank" — a genuine 0 is rare in scaling PnL
+          // and a leftover 0 from earlier UI states is the common cause.
+          if (premiumSchedule && (t.premiumPnl == null || t.premiumPnl === 0)) {
             const sug = pnlFromSchedule(
               premiumBalance,
               premiumSchedule,
@@ -378,7 +382,7 @@ const datasetRouter = router({
             );
             if (sug != null) patch.premiumPnl = sug;
           }
-          if (speedSchedule && t.speedPnl == null) {
+          if (speedSchedule && (t.speedPnl == null || t.speedPnl === 0)) {
             const sug = pnlFromSchedule(
               speedBalance,
               speedSchedule,
