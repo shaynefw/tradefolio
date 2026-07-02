@@ -7,12 +7,14 @@ import {
   BarChart2,
   Clock,
   Database,
+  Download,
   FlaskConical,
   Layers,
   Loader2,
   Plus,
   TrendingDown,
   TrendingUp,
+  Upload,
   Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -281,6 +283,44 @@ export default function Backtest() {
     });
   }
 
+  // Import backup — a hidden file input triggered by the header button.
+  const importMutation = trpc.backtest.dataset.importBackup.useMutation({
+    onSuccess: (result) => {
+      setSelectedDatasetId(result.dataset.id);
+      utils.backtest.dataset.list.invalidate();
+      toast.success(
+        `Imported "${result.dataset.name}" (${result.importedTrades} trade${result.importedTrades === 1 ? "" : "s"})`,
+      );
+    },
+    onError: (err) => {
+      // CONFLICT surfaces the duplicate-name collision distinctly.
+      const isConflict = err.data?.code === "CONFLICT";
+      toast.error(
+        isConflict
+          ? err.message
+          : err.message ?? "Failed to import backup",
+      );
+    },
+  });
+
+  function handleImportFile(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result));
+        if (!parsed || parsed.version !== 1 || !parsed.dataset || !parsed.trades) {
+          toast.error("Not a valid Tradefolio backup file");
+          return;
+        }
+        importMutation.mutate({ backup: parsed });
+      } catch {
+        toast.error("Couldn't parse the file — is it a Tradefolio backup?");
+      }
+    };
+    reader.onerror = () => toast.error("Couldn't read the file");
+    reader.readAsText(file);
+  }
+
   // Rename mutation — uses prompt() so we don't have to build a second modal
   // just for a single text field. Falls back to a toast on cancel/empty.
   const renameDataset = trpc.backtest.dataset.update.useMutation({
@@ -385,6 +425,22 @@ export default function Backtest() {
                 <Plus className="h-3.5 w-3.5" />
                 New dataset
               </Button>
+              <label className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card/60 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer">
+                <Upload className="h-3.5 w-3.5" />
+                {importMutation.isPending ? "Uploading…" : "Upload backup"}
+                <input
+                  type="file"
+                  accept="application/json,.json"
+                  className="hidden"
+                  disabled={importMutation.isPending}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    // Reset the value so re-uploading the same file re-triggers.
+                    e.target.value = "";
+                    if (file) handleImportFile(file);
+                  }}
+                />
+              </label>
             </div>
           )}
         </div>
@@ -676,6 +732,35 @@ function DatasetSettingsDialog({
     onError: (err) => toast.error(err.message ?? "Failed to save"),
   });
 
+  const [downloading, setDownloading] = useState(false);
+  async function handleDownload() {
+    setDownloading(true);
+    try {
+      const backup = await utils.backtest.dataset.exportBackup.fetch({
+        id: datasetId,
+      });
+      const blob = new Blob([JSON.stringify(backup, null, 2)], {
+        type: "application/json",
+      });
+      const safeName = backup.dataset.name.replace(/[^a-z0-9-_]+/gi, "-");
+      const today = new Date().toISOString().slice(0, 10);
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `tradefolio-backup-${safeName}-${today}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+      toast.success(`Backup downloaded (${backup.trades.length} trades)`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to download backup",
+      );
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   function parseDollar(s: string): number | null {
     const t = s.trim();
     if (t === "") return null;
@@ -881,6 +966,17 @@ function DatasetSettingsDialog({
           </section>
 
           <DialogFooter className="gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleDownload}
+              disabled={downloading || mutation.isPending}
+              className="mr-auto gap-1.5"
+            >
+              <Download className="h-3.5 w-3.5" />
+              {downloading ? "Preparing…" : "Download backup"}
+            </Button>
             <Button
               type="button"
               variant="outline"

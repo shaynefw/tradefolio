@@ -3,7 +3,7 @@
 // joins, no shared state.
 
 import { z } from "zod";
-import { and, asc, desc, eq, max, sql } from "drizzle-orm";
+import { and, asc, desc, eq, max, ne, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc.js";
 import { db, schema } from "../db.js";
@@ -65,6 +65,35 @@ const tradePatchInput = z.object({
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// Ensures no other dataset owned by this user has the same name. Pass
+// excludeId to allow rename-in-place (the current row is skipped from the
+// duplicate check). Throws a CONFLICT tRPC error so the client can surface
+// the collision cleanly.
+async function assertUniqueName(
+  userId: number,
+  name: string,
+  excludeId?: number,
+) {
+  const conditions = [
+    eq(schema.backtestDatasets.userId, userId),
+    eq(schema.backtestDatasets.name, name),
+  ];
+  if (excludeId != null) {
+    conditions.push(ne(schema.backtestDatasets.id, excludeId));
+  }
+  const [existing] = await db
+    .select({ id: schema.backtestDatasets.id })
+    .from(schema.backtestDatasets)
+    .where(and(...conditions))
+    .limit(1);
+  if (existing) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: `A dataset named "${name}" already exists`,
+    });
+  }
+}
 
 async function getOwnedDataset(userId: number, datasetId: number) {
   const [ds] = await db
@@ -138,6 +167,7 @@ const datasetRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await assertUniqueName(ctx.user.id, input.name);
       return await db.transaction(async (tx) => {
         const [ds] = await tx
           .insert(schema.backtestDatasets)
@@ -181,6 +211,9 @@ const datasetRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       await getOwnedDataset(ctx.user.id, input.id);
+      if (input.name != null) {
+        await assertUniqueName(ctx.user.id, input.name, input.id);
+      }
       const { id, ...patch } = input;
       const [updated] = await db
         .update(schema.backtestDatasets)
@@ -198,6 +231,107 @@ const datasetRouter = router({
         .delete(schema.backtestDatasets)
         .where(eq(schema.backtestDatasets.id, input.id));
       return { ok: true };
+    }),
+
+  // Full backup: dataset config + all trades, ready to serialize to JSON on
+  // the client. Kept as a query (idempotent, cacheable) since it just reads.
+  exportBackup: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const ds = await getOwnedDataset(ctx.user.id, input.id);
+      const trades = await db
+        .select()
+        .from(schema.backtestTrades)
+        .where(eq(schema.backtestTrades.datasetId, input.id))
+        .orderBy(asc(schema.backtestTrades.sequenceIdx));
+      return {
+        version: 1 as const,
+        exportedAt: new Date().toISOString(),
+        dataset: {
+          name: ds.name,
+          brickPoints: ds.brickPoints,
+          stopBricks: ds.stopBricks,
+          takeProfitBricks: ds.takeProfitBricks,
+          premiumStartBalance: ds.premiumStartBalance,
+          speedStartBalance: ds.speedStartBalance,
+          notes: ds.notes,
+          rrBuckets: ds.rrBuckets,
+        },
+        trades: trades.map((t) => ({
+          date: t.date,
+          time: t.time,
+          side: t.side,
+          tradeNo: t.tradeNo,
+          validEntry: t.validEntry,
+          outcome: t.outcome,
+          mae: t.mae,
+          mfe: t.mfe,
+          recoveryStage: t.recoveryStage,
+          premiumPnl: t.premiumPnl,
+          premiumBalance: t.premiumBalance,
+          premiumLabel: t.premiumLabel,
+          premiumResetBalance: t.premiumResetBalance,
+          speedPnl: t.speedPnl,
+          speedBalance: t.speedBalance,
+          speedLabel: t.speedLabel,
+          speedResetBalance: t.speedResetBalance,
+          notes: t.notes,
+          isPending: t.isPending,
+        })),
+      };
+    }),
+
+  // Restore from a backup payload. Rejects if the name would collide with
+  // another dataset the user owns — the client surfaces the CONFLICT so the
+  // user can rename before re-uploading. Whole operation runs in a txn.
+  importBackup: protectedProcedure
+    .input(
+      z.object({
+        backup: z.object({
+          version: z.literal(1),
+          dataset: z.object({
+            name: z.string().min(1).max(100),
+            brickPoints: z.number().int().positive(),
+            stopBricks: z.number().int().positive(),
+            takeProfitBricks: z.number().int().positive(),
+            premiumStartBalance: z.number().nullable(),
+            speedStartBalance: z.number().nullable(),
+            notes: z.string().nullable(),
+            rrBuckets: z.string().nullable(),
+          }),
+          trades: z.array(tradeCreateInput),
+        }),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { dataset, trades } = input.backup;
+      await assertUniqueName(ctx.user.id, dataset.name);
+      return await db.transaction(async (tx) => {
+        const [ds] = await tx
+          .insert(schema.backtestDatasets)
+          .values({
+            userId: ctx.user.id,
+            name: dataset.name,
+            brickPoints: dataset.brickPoints,
+            stopBricks: dataset.stopBricks,
+            takeProfitBricks: dataset.takeProfitBricks,
+            premiumStartBalance: dataset.premiumStartBalance,
+            speedStartBalance: dataset.speedStartBalance,
+            notes: dataset.notes,
+            rrBuckets: dataset.rrBuckets,
+          })
+          .returning();
+        if (trades.length > 0) {
+          await tx.insert(schema.backtestTrades).values(
+            trades.map((t, i) => ({
+              ...t,
+              datasetId: ds.id,
+              sequenceIdx: i,
+            })),
+          );
+        }
+        return { dataset: ds, importedTrades: trades.length };
+      });
     }),
 });
 
