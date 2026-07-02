@@ -12,6 +12,7 @@ import type {
   BacktestTrade,
   RecoveryStage,
   RrBucketConfig,
+  ScalingSchedule,
   Side,
 } from "./types";
 
@@ -104,6 +105,8 @@ export interface ServerDatasetMeta {
   speedStartBalance: number | null;
   notes: string | null;
   rrBuckets: string | null; // JSON string of RrBucketConfig[]
+  premiumScalingSchedule: string | null; // JSON string of ScalingLevel[]
+  speedScalingSchedule: string | null;
 }
 
 // What backtest.trade.list returns per row.
@@ -192,6 +195,39 @@ export function serverRowToBacktestTrade(
   };
 }
 
+function parseScalingSchedule(raw: string | null): ScalingSchedule | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    const out: ScalingSchedule = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      const it = item as Record<string, unknown>;
+      if (
+        typeof it.name === "string" &&
+        typeof it.recommendedBalance === "number" &&
+        typeof it.profitPerTrade === "number" &&
+        typeof it.initialRisk === "number" &&
+        typeof it.recovery1Risk === "number"
+      ) {
+        out.push({
+          name: it.name,
+          recommendedBalance: it.recommendedBalance,
+          profitPerTrade: it.profitPerTrade,
+          initialRisk: it.initialRisk,
+          recovery1Risk: it.recovery1Risk,
+          recovery2Risk:
+            typeof it.recovery2Risk === "number" ? it.recovery2Risk : null,
+        });
+      }
+    }
+    return out.length > 0 ? out : null;
+  } catch {
+    return null;
+  }
+}
+
 function parseRrBuckets(raw: string | null): RrBucketConfig[] | null {
   if (!raw) return null;
   try {
@@ -231,6 +267,8 @@ export function buildDatasetFromServer(
     speedStartBalance: meta.speedStartBalance,
     notes: meta.notes,
     rrBuckets: parseRrBuckets(meta.rrBuckets),
+    premiumScalingSchedule: parseScalingSchedule(meta.premiumScalingSchedule),
+    speedScalingSchedule: parseScalingSchedule(meta.speedScalingSchedule),
     trades: rows.map(serverRowToBacktestTrade),
   };
 }

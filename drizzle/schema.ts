@@ -131,6 +131,13 @@ export const backtestDatasets = sqliteTable("backtest_datasets", {
   // Stored as a JSON array of { tpPoints, stopPoints }; null falls back to
   // the default 1:NRR ladder (tpPoints = N × stopBricks × brickPoints).
   rrBuckets: text("rr_buckets"),
+  // Level ladder for each scaling schedule — JSON array of
+  //   { name, recommendedBalance, profitPerTrade, initialRisk,
+  //     recovery1Risk, recovery2Risk }
+  // ordered by recommendedBalance ascending. Enables auto-suggested trade
+  // PnLs in the Add-trade modal. null = no schedule (manual PnL only).
+  premiumScalingSchedule: text("premium_scaling_schedule"),
+  speedScalingSchedule: text("speed_scaling_schedule"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .default(sql`(unixepoch() * 1000)`)
     .notNull(),

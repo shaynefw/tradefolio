@@ -71,6 +71,10 @@ export interface BacktestDataset {
   // ladder. Each bucket holds the take-profit and stop thresholds in
   // points; RR is derived as tpPoints / stopPoints.
   rrBuckets: RrBucketConfig[] | null;
+  // Scaling schedules per side. When set, the Add-trade modal auto-fills
+  // PnL from the level whose recommendedBalance ≤ current running balance.
+  premiumScalingSchedule: ScalingSchedule | null;
+  speedScalingSchedule: ScalingSchedule | null;
   trades: BacktestTrade[];
 }
 
@@ -78,3 +82,17 @@ export interface RrBucketConfig {
   tpPoints: number;
   stopPoints: number;
 }
+
+// One row of a scaling schedule. Levels are ordered by recommendedBalance
+// ascending; the "current level" for a given balance is the highest one
+// whose recommendedBalance ≤ balance.
+export interface ScalingLevel {
+  name: string;             // e.g. "s1", "P1"
+  recommendedBalance: number;
+  profitPerTrade: number;
+  initialRisk: number;
+  recovery1Risk: number;
+  recovery2Risk: number | null; // null means "n/a"
+}
+
+export type ScalingSchedule = ScalingLevel[];

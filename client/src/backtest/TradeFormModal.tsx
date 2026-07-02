@@ -13,8 +13,15 @@ import {
 } from "../components/ui/dialog";
 import { trpc } from "../lib/trpc";
 import { formatCurrency } from "../lib/utils";
-import type { BacktestTrade, Outcome, RecoveryStage, Side } from "./types";
+import type {
+  BacktestTrade,
+  Outcome,
+  RecoveryStage,
+  ScalingSchedule,
+  Side,
+} from "./types";
 import type { ScalingSeries } from "./calculations";
+import { findCurrentLevel, suggestedPnl } from "./scaling";
 
 // ---------------------------------------------------------------------------
 // Local form state — mirrors the tradeCreateInput shape but keeps strings for
@@ -142,6 +149,10 @@ interface TradeFormModalProps {
   // Full trade list — used to auto-suggest the trade # for a new trade
   // based on how many trades already sit on the selected date.
   existingTrades: BacktestTrade[];
+  // Optional scaling schedules — when present, PnL fields auto-populate
+  // from the level whose recommendedBalance ≤ current running balance.
+  premiumSchedule: ScalingSchedule | null;
+  speedSchedule: ScalingSchedule | null;
 }
 
 export function TradeFormModal({
@@ -152,6 +163,8 @@ export function TradeFormModal({
   premiumSeries,
   speedSeries,
   existingTrades,
+  premiumSchedule,
+  speedSchedule,
 }: TradeFormModalProps) {
   const isEdit = editingTrade?.id != null;
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -198,6 +211,58 @@ export function TradeFormModal({
     if (!open || isEdit) return;
     setForm((f) => ({ ...f, tradeNo: String(suggestedTradeNo) }));
   }, [open, isEdit, suggestedTradeNo]);
+
+  // Auto-fill PnL from the scaling schedules whenever outcome or recovery
+  // stage changes. Skips when there's no schedule set, when the balance is
+  // below the first level, or when the level lacks that specific risk
+  // (e.g. R2 = n/a on a Speed level). Skips edit mode by default so
+  // recorded PnLs aren't clobbered.
+  useEffect(() => {
+    if (!open || isEdit) return;
+    if (form.isPending) return;
+    // Balance at trade entry — for a new trade this is the current series end.
+    const premiumBal = premiumSeries.end;
+    const speedBal = speedSeries.end;
+    const outcome = (form.outcome || null) as Outcome | null;
+    const premiumSug = suggestedPnl(
+      premiumBal,
+      premiumSchedule,
+      outcome,
+      form.recoveryStage,
+    );
+    const speedSug = suggestedPnl(
+      speedBal,
+      speedSchedule,
+      outcome,
+      form.recoveryStage,
+    );
+    setForm((f) => ({
+      ...f,
+      premiumPnl: premiumSug != null ? String(premiumSug) : f.premiumPnl,
+      speedPnl: speedSug != null ? String(speedSug) : f.speedPnl,
+    }));
+  }, [
+    open,
+    isEdit,
+    form.isPending,
+    form.outcome,
+    form.recoveryStage,
+    premiumSeries.end,
+    speedSeries.end,
+    premiumSchedule,
+    speedSchedule,
+  ]);
+
+  // Look up the current level for both scalings so the modal can show a
+  // "you're at s2 · profit $160" hint above each PnL input.
+  const premiumLevel = useMemo(
+    () => findCurrentLevel(premiumSeries.end, premiumSchedule),
+    [premiumSeries.end, premiumSchedule],
+  );
+  const speedLevel = useMemo(
+    () => findCurrentLevel(speedSeries.end, speedSchedule),
+    [speedSeries.end, speedSchedule],
+  );
 
   const utils = trpc.useUtils();
 
@@ -501,6 +566,11 @@ export function TradeFormModal({
                     <div className="flex items-baseline justify-between">
                       <p className="text-xs uppercase tracking-wider text-muted-foreground">
                         Premium
+                        {premiumLevel && (
+                          <span className="ml-1.5 rounded bg-emerald-500/15 px-1 py-0.5 text-[9px] font-semibold uppercase text-emerald-300">
+                            {premiumLevel.name}
+                          </span>
+                        )}
                       </p>
                       <CurrentBalanceHint
                         series={premiumSeries}
@@ -531,6 +601,11 @@ export function TradeFormModal({
                     <div className="flex items-baseline justify-between">
                       <p className="text-xs uppercase tracking-wider text-muted-foreground">
                         Speed
+                        {speedLevel && (
+                          <span className="ml-1.5 rounded bg-sky-500/15 px-1 py-0.5 text-[9px] font-semibold uppercase text-sky-300">
+                            {speedLevel.name}
+                          </span>
+                        )}
                       </p>
                       <CurrentBalanceHint
                         series={speedSeries}

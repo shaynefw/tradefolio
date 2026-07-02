@@ -152,6 +152,16 @@ export async function initDb() {
   );
   await addColumnIfMissing("backtest_datasets", "notes", "TEXT");
   await addColumnIfMissing("backtest_datasets", "rr_buckets", "TEXT");
+  await addColumnIfMissing(
+    "backtest_datasets",
+    "premium_scaling_schedule",
+    "TEXT",
+  );
+  await addColumnIfMissing(
+    "backtest_datasets",
+    "speed_scaling_schedule",
+    "TEXT",
+  );
 }
 
 async function addColumnIfMissing(

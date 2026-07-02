@@ -74,7 +74,16 @@ import {
   computeRrBuckets,
   computeScaling,
 } from "../backtest/calculations";
-import type { BacktestDataset, RrBucketConfig } from "../backtest/types";
+import type {
+  BacktestDataset,
+  RrBucketConfig,
+  ScalingLevel,
+  ScalingSchedule,
+} from "../backtest/types";
+import {
+  IRENKO20_PREMIUM_SCHEDULE,
+  IRENKO20_SPEED_SCHEDULE,
+} from "../backtest/scaling";
 
 // ---------------------------------------------------------------------------
 // Small primitives — kept local so the Analytics page's StatCard layout stays
@@ -538,6 +547,8 @@ export default function Backtest() {
               speedStartBalance: activeMeta.speedStartBalance ?? null,
               notes: activeMeta.notes ?? null,
               rrBuckets: ds?.rrBuckets ?? null,
+              premiumScalingSchedule: ds?.premiumScalingSchedule ?? null,
+              speedScalingSchedule: ds?.speedScalingSchedule ?? null,
             }}
           />
         )}
@@ -662,6 +673,8 @@ interface DatasetSettingsInitial {
   speedStartBalance: number | null;
   notes: string | null;
   rrBuckets: RrBucketConfig[] | null;
+  premiumScalingSchedule: ScalingSchedule | null;
+  speedScalingSchedule: ScalingSchedule | null;
 }
 
 type RrRow = { tp: string; stop: string };
@@ -694,6 +707,8 @@ function DatasetSettingsDialog({
   const [speed, setSpeed] = useState("");
   const [notes, setNotes] = useState("");
   const [rrRows, setRrRows] = useState<RrRow[]>([]);
+  const [premiumSchedule, setPremiumSchedule] = useState<ScalingSchedule>([]);
+  const [speedSchedule, setSpeedSchedule] = useState<ScalingSchedule>([]);
 
   // Re-sync when opened (or the underlying dataset switches).
   useEffect(() => {
@@ -713,12 +728,16 @@ function DatasetSettingsDialog({
           }))
         : defaultLadder(stopBricks, brickPoints),
     );
+    setPremiumSchedule(initial.premiumScalingSchedule ?? []);
+    setSpeedSchedule(initial.speedScalingSchedule ?? []);
   }, [
     open,
     initial.premiumStartBalance,
     initial.speedStartBalance,
     initial.notes,
     initial.rrBuckets,
+    initial.premiumScalingSchedule,
+    initial.speedScalingSchedule,
     stopBricks,
     brickPoints,
   ]);
@@ -798,6 +817,10 @@ function DatasetSettingsDialog({
         matchesDefault || cleanRr.length === 0
           ? null
           : JSON.stringify(cleanRr),
+      premiumScalingSchedule:
+        premiumSchedule.length === 0 ? null : JSON.stringify(premiumSchedule),
+      speedScalingSchedule:
+        speedSchedule.length === 0 ? null : JSON.stringify(speedSchedule),
     });
   }
 
@@ -965,6 +988,42 @@ function DatasetSettingsDialog({
             </Button>
           </section>
 
+          {/* Scaling schedules */}
+          <section className="space-y-2">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                Scaling schedules (auto-PnL)
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setPremiumSchedule(IRENKO20_PREMIUM_SCHEDULE);
+                  setSpeedSchedule(IRENKO20_SPEED_SCHEDULE);
+                }}
+                className="text-[10px] text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+              >
+                Load iRenko20 preset
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Each row = one level. When adding a trade, the modal picks the
+              highest level whose recommended balance ≤ current running balance
+              and pre-fills PnL based on outcome + recovery stage.
+            </p>
+            <ScheduleEditor
+              label="Premium"
+              accentClass="text-emerald-300"
+              schedule={premiumSchedule}
+              onChange={setPremiumSchedule}
+            />
+            <ScheduleEditor
+              label="Speed"
+              accentClass="text-sky-300"
+              schedule={speedSchedule}
+              onChange={setSpeedSchedule}
+            />
+          </section>
+
           <DialogFooter className="gap-2 pt-2">
             <Button
               type="button"
@@ -992,6 +1051,151 @@ function DatasetSettingsDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Scaling schedule editor — per-side editable table of ScalingLevel rows.
+// ---------------------------------------------------------------------------
+
+function ScheduleEditor({
+  label,
+  accentClass,
+  schedule,
+  onChange,
+}: {
+  label: string;
+  accentClass: string;
+  schedule: ScalingSchedule;
+  onChange: (next: ScalingSchedule) => void;
+}) {
+  function updateLevel(i: number, patch: Partial<ScalingLevel>) {
+    onChange(schedule.map((lvl, idx) => (idx === i ? { ...lvl, ...patch } : lvl)));
+  }
+  function addLevel() {
+    const last = schedule[schedule.length - 1];
+    onChange([
+      ...schedule,
+      {
+        name: `${label[0].toLowerCase()}${schedule.length + 1}`,
+        recommendedBalance: last ? last.recommendedBalance * 2 : 2560,
+        profitPerTrade: last ? last.profitPerTrade * 2 : 80,
+        initialRisk: last ? last.initialRisk * 2 : 320,
+        recovery1Risk: last ? last.recovery1Risk * 2 : 1280,
+        recovery2Risk: last?.recovery2Risk != null ? last.recovery2Risk * 2 : null,
+      },
+    ]);
+  }
+  function removeLevel(i: number) {
+    onChange(schedule.filter((_, idx) => idx !== i));
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-card/40">
+      <div className="flex items-center justify-between border-b border-border/60 px-3 py-1.5">
+        <p className={cn("text-xs font-semibold", accentClass)}>{label}</p>
+        <Button type="button" variant="ghost" size="sm" onClick={addLevel} className="h-6 gap-1 px-2 text-xs">
+          <Plus className="h-3 w-3" />
+          Add level
+        </Button>
+      </div>
+      {schedule.length === 0 ? (
+        <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+          No schedule yet — load the iRenko20 preset or add levels manually.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-muted/30 text-[10px] uppercase text-muted-foreground">
+              <tr>
+                <th className="px-2 py-1 text-left">Name</th>
+                <th className="px-2 py-1 text-right">Rec. balance</th>
+                <th className="px-2 py-1 text-right">Profit</th>
+                <th className="px-2 py-1 text-right">Init risk</th>
+                <th className="px-2 py-1 text-right">R1 risk</th>
+                <th className="px-2 py-1 text-right">R2 risk</th>
+                <th className="w-8" />
+              </tr>
+            </thead>
+            <tbody>
+              {schedule.map((lvl, i) => (
+                <tr key={i} className="border-t border-border/40">
+                  <td className="px-1.5 py-1">
+                    <input
+                      type="text"
+                      value={lvl.name}
+                      onChange={(e) => updateLevel(i, { name: e.target.value })}
+                      className="h-7 w-16 rounded border border-border bg-background px-1.5 text-xs text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </td>
+                  <td className="px-1.5 py-1">
+                    <input
+                      type="number"
+                      step="any"
+                      value={lvl.recommendedBalance}
+                      onChange={(e) => updateLevel(i, { recommendedBalance: Number(e.target.value) || 0 })}
+                      className="h-7 w-24 rounded border border-border bg-background px-1.5 text-right text-xs text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </td>
+                  <td className="px-1.5 py-1">
+                    <input
+                      type="number"
+                      step="any"
+                      value={lvl.profitPerTrade}
+                      onChange={(e) => updateLevel(i, { profitPerTrade: Number(e.target.value) || 0 })}
+                      className="h-7 w-20 rounded border border-border bg-background px-1.5 text-right text-xs text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </td>
+                  <td className="px-1.5 py-1">
+                    <input
+                      type="number"
+                      step="any"
+                      value={lvl.initialRisk}
+                      onChange={(e) => updateLevel(i, { initialRisk: Number(e.target.value) || 0 })}
+                      className="h-7 w-20 rounded border border-border bg-background px-1.5 text-right text-xs text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </td>
+                  <td className="px-1.5 py-1">
+                    <input
+                      type="number"
+                      step="any"
+                      value={lvl.recovery1Risk}
+                      onChange={(e) => updateLevel(i, { recovery1Risk: Number(e.target.value) || 0 })}
+                      className="h-7 w-20 rounded border border-border bg-background px-1.5 text-right text-xs text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </td>
+                  <td className="px-1.5 py-1">
+                    <input
+                      type="text"
+                      // Freeform to support "n/a" — parse below.
+                      value={lvl.recovery2Risk == null ? "n/a" : String(lvl.recovery2Risk)}
+                      onChange={(e) => {
+                        const v = e.target.value.trim().toLowerCase();
+                        const parsed = v === "" || v === "n/a" ? null : Number(v);
+                        updateLevel(i, {
+                          recovery2Risk: parsed != null && Number.isFinite(parsed) ? parsed : null,
+                        });
+                      }}
+                      className="h-7 w-20 rounded border border-border bg-background px-1.5 text-right text-xs text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </td>
+                  <td className="px-1 py-1 text-right">
+                    <button
+                      type="button"
+                      onClick={() => removeLevel(i)}
+                      title="Remove level"
+                      className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive-foreground"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2280,6 +2484,8 @@ function TradeLogTab({
           premiumSeries={premiumSeries}
           speedSeries={speedSeries}
           existingTrades={dataset.trades}
+          premiumSchedule={dataset.premiumScalingSchedule}
+          speedSchedule={dataset.speedScalingSchedule}
           datasetId={datasetId}
           editingTrade={editingTrade}
         />

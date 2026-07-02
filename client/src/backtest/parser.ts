@@ -240,6 +240,8 @@ export function parseBacktestCsv(
     speedStartBalance,
     notes: null,
     rrBuckets: null,
+    premiumScalingSchedule: null,
+    speedScalingSchedule: null,
     trades,
   };
 }

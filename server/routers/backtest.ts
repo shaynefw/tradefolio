@@ -137,6 +137,8 @@ const datasetRouter = router({
         speedStartBalance: schema.backtestDatasets.speedStartBalance,
         notes: schema.backtestDatasets.notes,
         rrBuckets: schema.backtestDatasets.rrBuckets,
+        premiumScalingSchedule: schema.backtestDatasets.premiumScalingSchedule,
+        speedScalingSchedule: schema.backtestDatasets.speedScalingSchedule,
         createdAt: schema.backtestDatasets.createdAt,
         updatedAt: schema.backtestDatasets.updatedAt,
         // Subquery counted via raw SQL — drizzle's sql template wasn't
@@ -160,6 +162,8 @@ const datasetRouter = router({
         speedStartBalance: z.number().nullable().optional(),
         notes: z.string().nullable().optional(),
         rrBuckets: z.string().nullable().optional(),
+        premiumScalingSchedule: z.string().nullable().optional(),
+        speedScalingSchedule: z.string().nullable().optional(),
         // Optional seed trades — used by "Load MNQ sample" flow. The whole
         // create-and-seed runs in one transaction so partial failures don't
         // leave an empty dataset around.
@@ -181,6 +185,8 @@ const datasetRouter = router({
             speedStartBalance: input.speedStartBalance ?? null,
             notes: input.notes ?? null,
             rrBuckets: input.rrBuckets ?? null,
+            premiumScalingSchedule: input.premiumScalingSchedule ?? null,
+            speedScalingSchedule: input.speedScalingSchedule ?? null,
           })
           .returning();
         if (input.seedTrades && input.seedTrades.length > 0) {
@@ -207,6 +213,8 @@ const datasetRouter = router({
         speedStartBalance: z.number().nullable().optional(),
         notes: z.string().nullable().optional(),
         rrBuckets: z.string().nullable().optional(),
+        premiumScalingSchedule: z.string().nullable().optional(),
+        speedScalingSchedule: z.string().nullable().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -256,6 +264,8 @@ const datasetRouter = router({
           speedStartBalance: ds.speedStartBalance,
           notes: ds.notes,
           rrBuckets: ds.rrBuckets,
+          premiumScalingSchedule: ds.premiumScalingSchedule,
+          speedScalingSchedule: ds.speedScalingSchedule,
         },
         trades: trades.map((t) => ({
           date: t.date,
@@ -298,6 +308,8 @@ const datasetRouter = router({
             speedStartBalance: z.number().nullable(),
             notes: z.string().nullable(),
             rrBuckets: z.string().nullable(),
+            premiumScalingSchedule: z.string().nullable().optional(),
+            speedScalingSchedule: z.string().nullable().optional(),
           }),
           trades: z.array(tradeCreateInput),
         }),
@@ -319,6 +331,8 @@ const datasetRouter = router({
             speedStartBalance: dataset.speedStartBalance,
             notes: dataset.notes,
             rrBuckets: dataset.rrBuckets,
+            premiumScalingSchedule: dataset.premiumScalingSchedule ?? null,
+            speedScalingSchedule: dataset.speedScalingSchedule ?? null,
           })
           .returning();
         if (trades.length > 0) {
