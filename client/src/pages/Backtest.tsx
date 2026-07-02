@@ -12,6 +12,7 @@ import {
   Layers,
   Loader2,
   Plus,
+  Settings,
   TrendingDown,
   TrendingUp,
   Upload,
@@ -404,7 +405,7 @@ export default function Backtest() {
                 title="Dataset settings (scaling, notes, RR buckets)"
                 className="rounded-md border border-border bg-card/60 p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
               >
-                <Wallet className="h-3.5 w-3.5" />
+                <Settings className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
