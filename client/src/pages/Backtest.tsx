@@ -47,6 +47,7 @@ import {
   type ServerTradeRow,
 } from "../backtest/dataSource";
 import { TradeFormModal } from "../backtest/TradeFormModal";
+import { BacktestCalendar } from "../backtest/BacktestCalendar";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -255,7 +256,9 @@ export default function Backtest() {
     [ds],
   );
 
-  const [tab, setTab] = useState<"overview" | "timing" | "scaling" | "log">("overview");
+  const [tab, setTab] = useState<
+    "overview" | "timing" | "scaling" | "calendar" | "log"
+  >("overview");
 
   // Dataset-create mutation, shared by both empty-state buttons.
   const createDataset = trpc.backtest.dataset.create.useMutation({
@@ -561,6 +564,7 @@ export default function Backtest() {
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="timing">Timing / Sequence</TabsTrigger>
               <TabsTrigger value="scaling">Scaling</TabsTrigger>
+              <TabsTrigger value="calendar">Calendar</TabsTrigger>
               <TabsTrigger value="log">Trade Log</TabsTrigger>
             </TabsList>
 
@@ -590,6 +594,10 @@ export default function Backtest() {
                 speed={speed}
                 onOpenSettings={() => setScalingSettingsOpen(true)}
               />
+            </TabsContent>
+
+            <TabsContent value="calendar" className="space-y-6 mt-6">
+              <BacktestCalendar dataset={ds} />
             </TabsContent>
 
             <TabsContent value="log" className="space-y-6 mt-6">
@@ -753,6 +761,29 @@ function DatasetSettingsDialog({
   });
 
   const [downloading, setDownloading] = useState(false);
+  const backfillMutation = trpc.backtest.dataset.backfillScalingPnl.useMutation({
+    onSuccess: (r) => {
+      utils.backtest.trade.list.invalidate({ datasetId });
+      utils.backtest.dataset.list.invalidate();
+      toast.success(
+        r.filled === 0
+          ? "Nothing to backfill — no blank PnL fields found"
+          : `Backfilled ${r.filled} of ${r.total} trade${r.total === 1 ? "" : "s"}`,
+      );
+    },
+    onError: (err) => toast.error(err.message ?? "Backfill failed"),
+  });
+  function handleBackfill() {
+    if (
+      !window.confirm(
+        "Fill in the Premium / Speed PnL for every past trade that doesn't have one yet, using the current scaling schedule? Existing values are left untouched.",
+      )
+    ) {
+      return;
+    }
+    backfillMutation.mutate({ id: datasetId });
+  }
+
   async function handleDownload() {
     setDownloading(true);
     try {
@@ -1023,6 +1054,22 @@ function DatasetSettingsDialog({
               schedule={speedSchedule}
               onChange={setSpeedSchedule}
             />
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border bg-card/40 p-2">
+              <div className="flex-1 text-xs text-muted-foreground">
+                Set up scaling after already logging some trades? Fill blank
+                PnLs on past trades using the schedules above. Existing PnL
+                values are left alone.
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleBackfill}
+                disabled={backfillMutation.isPending || (premiumSchedule.length === 0 && speedSchedule.length === 0)}
+              >
+                {backfillMutation.isPending ? "Filling…" : "Backfill past trades"}
+              </Button>
+            </div>
           </section>
 
           <DialogFooter className="gap-2 pt-2">

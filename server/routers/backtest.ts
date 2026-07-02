@@ -66,6 +66,83 @@ const tradePatchInput = z.object({
 // Helpers
 // ---------------------------------------------------------------------------
 
+interface ScheduleLevel {
+  name: string;
+  recommendedBalance: number;
+  profitPerTrade: number;
+  initialRisk: number;
+  recovery1Risk: number;
+  recovery2Risk: number | null;
+}
+
+// Parses a JSON-encoded ScalingSchedule from a dataset column. Returns null
+// when malformed / empty so the caller can fall back cleanly.
+function parseSchedule(raw: string | null): ScheduleLevel[] | null {
+  if (!raw) return null;
+  try {
+    const arr = JSON.parse(raw) as unknown;
+    if (!Array.isArray(arr)) return null;
+    const out: ScheduleLevel[] = [];
+    for (const item of arr) {
+      if (!item || typeof item !== "object") continue;
+      const it = item as Record<string, unknown>;
+      if (
+        typeof it.name === "string" &&
+        typeof it.recommendedBalance === "number" &&
+        typeof it.profitPerTrade === "number" &&
+        typeof it.initialRisk === "number" &&
+        typeof it.recovery1Risk === "number"
+      ) {
+        out.push({
+          name: it.name,
+          recommendedBalance: it.recommendedBalance,
+          profitPerTrade: it.profitPerTrade,
+          initialRisk: it.initialRisk,
+          recovery1Risk: it.recovery1Risk,
+          recovery2Risk:
+            typeof it.recovery2Risk === "number" ? it.recovery2Risk : null,
+        });
+      }
+    }
+    return out.length > 0 ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+// Highest level whose recommendedBalance ≤ balance. Null when balance is
+// below the first level.
+function findLevel(
+  balance: number,
+  schedule: ScheduleLevel[],
+): ScheduleLevel | null {
+  const sorted = [...schedule].sort(
+    (a, b) => a.recommendedBalance - b.recommendedBalance,
+  );
+  let current: ScheduleLevel | null = null;
+  for (const lvl of sorted) {
+    if (balance >= lvl.recommendedBalance) current = lvl;
+    else break;
+  }
+  return current;
+}
+
+// Prescribed PnL for this outcome + recovery combo given the running
+// balance at trade entry.
+function pnlFromSchedule(
+  balance: number,
+  schedule: ScheduleLevel[],
+  outcome: "Took Profit" | "Took Loss",
+  recoveryStage: "none" | "first" | "second",
+): number | null {
+  const lvl = findLevel(balance, schedule);
+  if (!lvl) return null;
+  if (outcome === "Took Profit") return lvl.profitPerTrade;
+  if (recoveryStage === "none") return -lvl.initialRisk;
+  if (recoveryStage === "first") return -lvl.recovery1Risk;
+  return lvl.recovery2Risk != null ? -lvl.recovery2Risk : null;
+}
+
 // Ensures no other dataset owned by this user has the same name. Pass
 // excludeId to allow rename-in-place (the current row is skipped from the
 // duplicate check). Throws a CONFLICT tRPC error so the client can surface
@@ -239,6 +316,94 @@ const datasetRouter = router({
         .delete(schema.backtestDatasets)
         .where(eq(schema.backtestDatasets.id, input.id));
       return { ok: true };
+    }),
+
+  // Retroactively fills in premiumPnl / speedPnl for trades that don't have
+  // them yet, using the dataset's scaling schedules. Walks the trades in
+  // sequence, tracks the running balance for both scalings (honoring per-
+  // trade resets), and for each trade with an outcome computes the level
+  // from the current balance and sets pnl = ±(profit or risk). Only fills
+  // blanks — never overwrites existing pnl values.
+  backfillScalingPnl: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const ds = await getOwnedDataset(ctx.user.id, input.id);
+      const premiumSchedule = parseSchedule(ds.premiumScalingSchedule);
+      const speedSchedule = parseSchedule(ds.speedScalingSchedule);
+      if (!premiumSchedule && !speedSchedule) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "No scaling schedule configured — set one in Dataset settings first",
+        });
+      }
+      const trades = await db
+        .select()
+        .from(schema.backtestTrades)
+        .where(eq(schema.backtestTrades.datasetId, input.id))
+        .orderBy(asc(schema.backtestTrades.sequenceIdx));
+
+      let premiumBalance = ds.premiumStartBalance ?? 0;
+      let speedBalance = ds.speedStartBalance ?? 0;
+      let filled = 0;
+
+      await db.transaction(async (tx) => {
+        for (const t of trades) {
+          // Apply per-trade resets before evaluating.
+          if (t.premiumResetBalance != null) {
+            premiumBalance = t.premiumResetBalance;
+          }
+          if (t.speedResetBalance != null) {
+            speedBalance = t.speedResetBalance;
+          }
+          if (t.isPending || !t.outcome) {
+            // Non-decisive rows don't move the balance in the schedule sense.
+            premiumBalance += t.premiumPnl ?? 0;
+            speedBalance += t.speedPnl ?? 0;
+            continue;
+          }
+
+          const patch: {
+            premiumPnl?: number;
+            speedPnl?: number;
+            updatedAt?: Date;
+          } = {};
+
+          if (premiumSchedule && t.premiumPnl == null) {
+            const sug = pnlFromSchedule(
+              premiumBalance,
+              premiumSchedule,
+              t.outcome,
+              t.recoveryStage,
+            );
+            if (sug != null) patch.premiumPnl = sug;
+          }
+          if (speedSchedule && t.speedPnl == null) {
+            const sug = pnlFromSchedule(
+              speedBalance,
+              speedSchedule,
+              t.outcome,
+              t.recoveryStage,
+            );
+            if (sug != null) patch.speedPnl = sug;
+          }
+
+          if (patch.premiumPnl != null || patch.speedPnl != null) {
+            patch.updatedAt = new Date();
+            await tx
+              .update(schema.backtestTrades)
+              .set(patch)
+              .where(eq(schema.backtestTrades.id, t.id));
+            filled++;
+          }
+
+          // Use the (possibly just-filled) pnl to advance the running balance.
+          premiumBalance += patch.premiumPnl ?? t.premiumPnl ?? 0;
+          speedBalance += patch.speedPnl ?? t.speedPnl ?? 0;
+        }
+      });
+
+      return { filled, total: trades.length };
     }),
 
   // Full backup: dataset config + all trades, ready to serialize to JSON on
