@@ -2386,7 +2386,20 @@ function TradeLogTab({
                       </span>
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">{t.mae ?? "—"}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{t.mfe ?? "—"}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {t.mfe != null ? (
+                        t.mfe
+                      ) : t.outcome === "Took Profit" ? (
+                        <span
+                          className="inline-block rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase text-amber-300"
+                          title="Waiting for market close — record the session high after it closes"
+                        >
+                          pending
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td className="px-3 py-2">
                       <span
                         className={cn(
