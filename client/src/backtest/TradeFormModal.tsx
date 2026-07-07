@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { trpc } from "../lib/trpc";
-import { formatCurrency } from "../lib/utils";
+import { cn, formatCurrency } from "../lib/utils";
 import type {
   BacktestTrade,
   Outcome,
@@ -586,6 +586,10 @@ export function TradeFormModal({
                         className={inputClass}
                       />
                     </Field>
+                    <LevelPreview
+                      level={premiumLevel}
+                      onPick={(v) => setForm((f) => ({ ...f, premiumPnl: String(v) }))}
+                    />
                     <Field label="Reset balance to">
                       <input
                         type="number"
@@ -621,6 +625,10 @@ export function TradeFormModal({
                         className={inputClass}
                       />
                     </Field>
+                    <LevelPreview
+                      level={speedLevel}
+                      onPick={(v) => setForm((f) => ({ ...f, speedPnl: String(v) }))}
+                    />
                     <Field label="Reset balance to">
                       <input
                         type="number"
@@ -682,6 +690,50 @@ function Field({
 
 const inputClass =
   "h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring";
+
+// Reference chips for the current scaling level — profit and each risk tier.
+// Clicking one fills the PnL input, so the user can size a trade even when
+// auto-fill didn't fire (e.g. editing a pending trade).
+function LevelPreview({
+  level,
+  onPick,
+}: {
+  level: import("./types").ScalingLevel | null;
+  onPick: (value: number) => void;
+}) {
+  if (!level) return null;
+  const chips: Array<{ label: string; value: number }> = [
+    { label: "Profit", value: level.profitPerTrade },
+    { label: "Loss", value: -level.initialRisk },
+    { label: "R1", value: -level.recovery1Risk },
+  ];
+  if (level.recovery2Risk != null) {
+    chips.push({ label: "R2", value: -level.recovery2Risk });
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-1 pt-0.5">
+      <span className="text-[10px] text-muted-foreground">
+        {level.name}:
+      </span>
+      {chips.map((c) => (
+        <button
+          key={c.label}
+          type="button"
+          onClick={() => onPick(c.value)}
+          title={`Use ${formatCurrency(c.value)} (${c.label})`}
+          className={cn(
+            "rounded px-1.5 py-0.5 text-[10px] font-medium tabular-nums transition-colors hover:brightness-125",
+            c.value >= 0
+              ? "bg-emerald-500/15 text-emerald-300"
+              : "bg-red-500/15 text-red-300",
+          )}
+        >
+          {c.label} {formatCurrency(c.value)}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 // Tiny read-only badge that shows the running balance the user is "starting
 // from" for this trade. When adding, that's the series' current end balance.
