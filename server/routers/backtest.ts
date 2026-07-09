@@ -73,6 +73,8 @@ interface ScheduleLevel {
   initialRisk: number;
   recovery1Risk: number;
   recovery2Risk: number | null;
+  recovery1Profit: number | null;
+  recovery2Profit: number | null;
 }
 
 // Parses a JSON-encoded ScalingSchedule from a dataset column. Returns null
@@ -101,6 +103,10 @@ function parseSchedule(raw: string | null): ScheduleLevel[] | null {
           recovery1Risk: it.recovery1Risk,
           recovery2Risk:
             typeof it.recovery2Risk === "number" ? it.recovery2Risk : null,
+          recovery1Profit:
+            typeof it.recovery1Profit === "number" ? it.recovery1Profit : null,
+          recovery2Profit:
+            typeof it.recovery2Profit === "number" ? it.recovery2Profit : null,
         });
       }
     }
@@ -139,7 +145,13 @@ function pnlFromSchedule(
 ): number | null {
   const lvl = findLevel(balance, schedule);
   if (!lvl) return null;
-  if (outcome === "Took Profit") return lvl.profitPerTrade;
+  if (outcome === "Took Profit") {
+    if (recoveryStage === "first" && lvl.recovery1Profit != null)
+      return lvl.recovery1Profit;
+    if (recoveryStage === "second" && lvl.recovery2Profit != null)
+      return lvl.recovery2Profit;
+    return lvl.profitPerTrade;
+  }
   if (recoveryStage === "none") return -lvl.initialRisk;
   if (recoveryStage === "first") return -lvl.recovery1Risk;
   return lvl.recovery2Risk != null ? -lvl.recovery2Risk : null;

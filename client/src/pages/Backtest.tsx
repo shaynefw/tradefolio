@@ -1162,6 +1162,8 @@ function ScheduleEditor({
                 <th className="px-2 py-1 text-right">Init risk</th>
                 <th className="px-2 py-1 text-right">R1 risk</th>
                 <th className="px-2 py-1 text-right">R2 risk</th>
+                <th className="px-2 py-1 text-right">R1 profit</th>
+                <th className="px-2 py-1 text-right">R2 profit</th>
                 <th className="w-8" />
               </tr>
             </thead>
@@ -1222,6 +1224,34 @@ function ScheduleEditor({
                         const parsed = v === "" || v === "n/a" ? null : Number(v);
                         updateLevel(i, {
                           recovery2Risk: parsed != null && Number.isFinite(parsed) ? parsed : null,
+                        });
+                      }}
+                      className="h-7 w-20 rounded border border-border bg-background px-1.5 text-right text-xs text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </td>
+                  <td className="px-1.5 py-1">
+                    <input
+                      type="text"
+                      value={lvl.recovery1Profit == null ? "n/a" : String(lvl.recovery1Profit)}
+                      onChange={(e) => {
+                        const v = e.target.value.trim().toLowerCase();
+                        const parsed = v === "" || v === "n/a" ? null : Number(v);
+                        updateLevel(i, {
+                          recovery1Profit: parsed != null && Number.isFinite(parsed) ? parsed : null,
+                        });
+                      }}
+                      className="h-7 w-20 rounded border border-border bg-background px-1.5 text-right text-xs text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </td>
+                  <td className="px-1.5 py-1">
+                    <input
+                      type="text"
+                      value={lvl.recovery2Profit == null ? "n/a" : String(lvl.recovery2Profit)}
+                      onChange={(e) => {
+                        const v = e.target.value.trim().toLowerCase();
+                        const parsed = v === "" || v === "n/a" ? null : Number(v);
+                        updateLevel(i, {
+                          recovery2Profit: parsed != null && Number.isFinite(parsed) ? parsed : null,
                         });
                       }}
                       className="h-7 w-20 rounded border border-border bg-background px-1.5 text-right text-xs text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"

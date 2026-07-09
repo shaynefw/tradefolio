@@ -212,6 +212,16 @@ export function TradeFormModal({
     setForm((f) => ({ ...f, tradeNo: String(suggestedTradeNo) }));
   }, [open, isEdit, suggestedTradeNo]);
 
+  // Edit mode: a trade # of 0 is invalid (usually a leftover from a pending
+  // placeholder that's now being filled in). Bump it to the next slot for
+  // the date so the user never has to save a T0.
+  useEffect(() => {
+    if (!open || !isEdit) return;
+    if (form.tradeNo === "0" || form.tradeNo === "") {
+      setForm((f) => ({ ...f, tradeNo: String(suggestedTradeNo) }));
+    }
+  }, [open, isEdit, form.tradeNo, suggestedTradeNo]);
+
   // Auto-fill PnL from the scaling schedules whenever outcome or recovery
   // stage changes. Skips when there's no schedule set, when the balance is
   // below the first level, or when the level lacks that specific risk
@@ -330,7 +340,7 @@ export function TradeFormModal({
           date: new Date(`${form.date}T00:00:00`).getTime(),
           time: form.time.trim(),
           side: form.side,
-          tradeNo: Number(form.tradeNo) || 0,
+          tradeNo: Math.max(1, Number(form.tradeNo) || 1),
           validEntry: form.validEntry,
           outcome: (form.outcome || null) as Outcome | null,
           mae: num(form.mae),
@@ -451,7 +461,7 @@ export function TradeFormModal({
             <Field label="Trade #">
               <input
                 type="number"
-                min={0}
+                min={1}
                 value={form.tradeNo}
                 onChange={(e) => setForm((f) => ({ ...f, tradeNo: e.target.value }))}
                 className={inputClass}
@@ -705,10 +715,16 @@ function LevelPreview({
   const chips: Array<{ label: string; value: number }> = [
     { label: "Profit", value: level.profitPerTrade },
     { label: "Loss", value: -level.initialRisk },
-    { label: "R1", value: -level.recovery1Risk },
+    { label: "R1 Loss", value: -level.recovery1Risk },
   ];
   if (level.recovery2Risk != null) {
-    chips.push({ label: "R2", value: -level.recovery2Risk });
+    chips.push({ label: "R2 Loss", value: -level.recovery2Risk });
+  }
+  if (level.recovery1Profit != null) {
+    chips.push({ label: "R1 Profit", value: level.recovery1Profit });
+  }
+  if (level.recovery2Profit != null) {
+    chips.push({ label: "R2 Profit", value: level.recovery2Profit });
   }
   return (
     <div className="flex flex-wrap items-center gap-1 pt-0.5">

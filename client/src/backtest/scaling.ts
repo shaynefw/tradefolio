@@ -63,7 +63,13 @@ export function suggestedPnl(
   if (!outcome) return null;
   const level = findCurrentLevel(balance, schedule);
   if (!level) return null;
-  if (outcome === "Took Profit") return level.profitPerTrade;
+  if (outcome === "Took Profit") {
+    if (recoveryStage === "first" && level.recovery1Profit != null)
+      return level.recovery1Profit;
+    if (recoveryStage === "second" && level.recovery2Profit != null)
+      return level.recovery2Profit;
+    return level.profitPerTrade;
+  }
   // outcome === "Took Loss"
   if (recoveryStage === "none") return -level.initialRisk;
   if (recoveryStage === "first") return -level.recovery1Risk;

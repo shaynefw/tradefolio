@@ -219,6 +219,10 @@ function parseScalingSchedule(raw: string | null): ScalingSchedule | null {
           recovery1Risk: it.recovery1Risk,
           recovery2Risk:
             typeof it.recovery2Risk === "number" ? it.recovery2Risk : null,
+          recovery1Profit:
+            typeof it.recovery1Profit === "number" ? it.recovery1Profit : null,
+          recovery2Profit:
+            typeof it.recovery2Profit === "number" ? it.recovery2Profit : null,
         });
       }
     }

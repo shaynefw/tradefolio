@@ -93,6 +93,10 @@ export interface ScalingLevel {
   initialRisk: number;
   recovery1Risk: number;
   recovery2Risk: number | null; // null means "n/a"
+  // Optional profit targets for winning recovery trades. Fall back to
+  // profitPerTrade when absent.
+  recovery1Profit?: number | null;
+  recovery2Profit?: number | null;
 }
 
 export type ScalingSchedule = ScalingLevel[];
