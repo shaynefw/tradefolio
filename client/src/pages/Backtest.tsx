@@ -867,7 +867,7 @@ function DatasetSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl bg-card max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl w-[95vw] bg-card max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Dataset settings</DialogTitle>
           <DialogDescription>
