@@ -5,7 +5,8 @@
 import { z } from "zod";
 import { and, asc, desc, eq, inArray, max, ne, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
-import { router, protectedProcedure } from "../trpc.js";
+import { randomBytes } from "crypto";
+import { router, protectedProcedure, publicProcedure } from "../trpc.js";
 import { db, schema } from "../db.js";
 
 // ---------------------------------------------------------------------------
@@ -230,6 +231,7 @@ const datasetRouter = router({
         rrBuckets: schema.backtestDatasets.rrBuckets,
         premiumScalingSchedule: schema.backtestDatasets.premiumScalingSchedule,
         speedScalingSchedule: schema.backtestDatasets.speedScalingSchedule,
+        shareToken: schema.backtestDatasets.shareToken,
         createdAt: schema.backtestDatasets.createdAt,
         updatedAt: schema.backtestDatasets.updatedAt,
         // Subquery counted via raw SQL — drizzle's sql template wasn't
@@ -527,6 +529,73 @@ const datasetRouter = router({
         }
         return { dataset: ds, importedTrades: trades.length };
       });
+    }),
+
+  // Generate (or return existing) a public read-only share token. Idempotent:
+  // calling twice returns the same token so the link stays stable.
+  enableSharing: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const ds = await getOwnedDataset(ctx.user.id, input.id);
+      if (ds.shareToken) return { token: ds.shareToken };
+      const token = randomBytes(24).toString("base64url"); // 32 url-safe chars
+      await db
+        .update(schema.backtestDatasets)
+        .set({ shareToken: token, updatedAt: new Date() })
+        .where(eq(schema.backtestDatasets.id, input.id));
+      return { token };
+    }),
+
+  // Revoke sharing — nulls the token, instantly breaking any existing link.
+  disableSharing: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      await getOwnedDataset(ctx.user.id, input.id);
+      await db
+        .update(schema.backtestDatasets)
+        .set({ shareToken: null, updatedAt: new Date() })
+        .where(eq(schema.backtestDatasets.id, input.id));
+      return { ok: true };
+    }),
+
+  // PUBLIC read-only fetch by share token. No auth — the unguessable token
+  // is the credential. Returns dataset config + all trades, but nothing that
+  // identifies the owner. Throws NOT_FOUND for unknown / revoked tokens.
+  getShared: publicProcedure
+    .input(z.object({ token: z.string().min(10) }))
+    .query(async ({ input }) => {
+      const [ds] = await db
+        .select()
+        .from(schema.backtestDatasets)
+        .where(eq(schema.backtestDatasets.shareToken, input.token))
+        .limit(1);
+      if (!ds) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "This share link is invalid or has been revoked",
+        });
+      }
+      const trades = await db
+        .select()
+        .from(schema.backtestTrades)
+        .where(eq(schema.backtestTrades.datasetId, ds.id))
+        .orderBy(asc(schema.backtestTrades.sequenceIdx));
+      return {
+        dataset: {
+          id: ds.id,
+          name: ds.name,
+          brickPoints: ds.brickPoints,
+          stopBricks: ds.stopBricks,
+          takeProfitBricks: ds.takeProfitBricks,
+          premiumStartBalance: ds.premiumStartBalance,
+          speedStartBalance: ds.speedStartBalance,
+          notes: ds.notes,
+          rrBuckets: ds.rrBuckets,
+          premiumScalingSchedule: ds.premiumScalingSchedule,
+          speedScalingSchedule: ds.speedScalingSchedule,
+        },
+        trades,
+      };
     }),
 });
 

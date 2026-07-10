@@ -162,6 +162,7 @@ export async function initDb() {
     "speed_scaling_schedule",
     "TEXT",
   );
+  await addColumnIfMissing("backtest_datasets", "share_token", "TEXT");
 }
 
 async function addColumnIfMissing(

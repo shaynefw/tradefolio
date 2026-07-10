@@ -21,6 +21,7 @@ const Tags = React.lazy(() => import("./pages/Tags"));
 const Strategies = React.lazy(() => import("./pages/Strategies"));
 const Backtest = React.lazy(() => import("./pages/Backtest"));
 const SettingsPage = React.lazy(() => import("./pages/Settings"));
+const SharedBacktest = React.lazy(() => import("./pages/SharedBacktest"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 
 function PageLoader() {
@@ -51,6 +52,7 @@ function AppRoutes() {
       <Switch>
         <Route path="/login" component={LoginPage} />
         <Route path="/register" component={RegisterPage} />
+        <Route path="/shared/backtest/:token" component={SharedBacktest} />
 
         <Route path="/">
           {() => (

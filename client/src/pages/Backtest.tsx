@@ -546,6 +546,7 @@ export default function Backtest() {
             datasetId={activeMeta.id}
             stopBricks={activeMeta.stopBricks}
             brickPoints={activeMeta.brickPoints}
+            shareToken={(activeMeta as { shareToken?: string | null }).shareToken ?? null}
             initial={{
               premiumStartBalance: activeMeta.premiumStartBalance ?? null,
               speedStartBalance: activeMeta.speedStartBalance ?? null,
@@ -702,6 +703,7 @@ function DatasetSettingsDialog({
   datasetId,
   stopBricks,
   brickPoints,
+  shareToken,
   initial,
 }: {
   open: boolean;
@@ -709,6 +711,7 @@ function DatasetSettingsDialog({
   datasetId: number;
   stopBricks: number;
   brickPoints: number;
+  shareToken: string | null;
   initial: DatasetSettingsInitial;
 }) {
   const utils = trpc.useUtils();
@@ -758,6 +761,24 @@ function DatasetSettingsDialog({
       onOpenChange(false);
     },
     onError: (err) => toast.error(err.message ?? "Failed to save"),
+  });
+
+  const shareUrl = shareToken
+    ? `${window.location.origin}/shared/backtest/${shareToken}`
+    : null;
+  const enableShare = trpc.backtest.dataset.enableSharing.useMutation({
+    onSuccess: () => {
+      utils.backtest.dataset.list.invalidate();
+      toast.success("Share link created");
+    },
+    onError: (err) => toast.error(err.message ?? "Failed to enable sharing"),
+  });
+  const disableShare = trpc.backtest.dataset.disableSharing.useMutation({
+    onSuccess: () => {
+      utils.backtest.dataset.list.invalidate();
+      toast.success("Sharing disabled — old link no longer works");
+    },
+    onError: (err) => toast.error(err.message ?? "Failed to disable sharing"),
   });
 
   const [downloading, setDownloading] = useState(false);
@@ -1072,6 +1093,67 @@ function DatasetSettingsDialog({
             </div>
           </section>
 
+          {/* Public sharing */}
+          <section className="space-y-2">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">
+              Share (read-only)
+            </p>
+            {shareUrl ? (
+              <div className="space-y-2 rounded-md border border-border bg-card/40 p-3">
+                <p className="text-xs text-muted-foreground">
+                  Anyone with this link can view this backtest read-only — no
+                  account needed. Revoke to break the link instantly.
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={shareUrl}
+                    onClick={(e) => e.currentTarget.select()}
+                    className="h-9 flex-1 rounded-md border border-border bg-background px-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(shareUrl);
+                      toast.success("Link copied");
+                    }}
+                  >
+                    Copy
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => disableShare.mutate({ id: datasetId })}
+                    disabled={disableShare.isPending}
+                    className="border-destructive/40 text-destructive-foreground hover:bg-destructive/10"
+                  >
+                    Revoke
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border bg-card/40 p-2">
+                <p className="flex-1 text-xs text-muted-foreground">
+                  Generate a public read-only link so others can view this
+                  backtest without an account.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => enableShare.mutate({ id: datasetId })}
+                  disabled={enableShare.isPending}
+                >
+                  {enableShare.isPending ? "Creating…" : "Create share link"}
+                </Button>
+              </div>
+            )}
+          </section>
+
           <DialogFooter className="gap-2 pt-2">
             <Button
               type="button"
@@ -1301,7 +1383,7 @@ function DatasetSelector({ datasets, activeId, onChange }: DatasetSelectorProps)
 // Overview tab
 // ---------------------------------------------------------------------------
 
-function OverviewTab({
+export function OverviewTab({
   core,
   recovery,
   premium,
@@ -1516,7 +1598,7 @@ function ScalingSummary({
 // Timing / Sequence tab
 // ---------------------------------------------------------------------------
 
-function TimingTab({
+export function TimingTab({
   byHour,
   byTradeNo,
   bySide,
@@ -1797,7 +1879,7 @@ function TimingTab({
 // Scaling tab
 // ---------------------------------------------------------------------------
 
-function ScalingTab({
+export function ScalingTab({
   premium,
   speed,
   onOpenSettings,

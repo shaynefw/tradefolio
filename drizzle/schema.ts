@@ -138,6 +138,8 @@ export const backtestDatasets = sqliteTable("backtest_datasets", {
   // PnLs in the Add-trade modal. null = no schedule (manual PnL only).
   premiumScalingSchedule: text("premium_scaling_schedule"),
   speedScalingSchedule: text("speed_scaling_schedule"),
+  // Unguessable random token for public read-only sharing. null = private.
+  shareToken: text("share_token"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .default(sql`(unixepoch() * 1000)`)
     .notNull(),
