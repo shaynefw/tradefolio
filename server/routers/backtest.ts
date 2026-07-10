@@ -3,7 +3,7 @@
 // joins, no shared state.
 
 import { z } from "zod";
-import { and, asc, desc, eq, max, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, max, ne, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc.js";
 import { db, schema } from "../db.js";
@@ -616,6 +616,23 @@ const tradeRouter = router({
         .delete(schema.backtestTrades)
         .where(eq(schema.backtestTrades.id, input.id));
       return { ok: true };
+    }),
+
+  // Delete many trades at once. All ids must belong to the same owned
+  // dataset — verified before any delete runs.
+  bulkDelete: protectedProcedure
+    .input(z.object({ datasetId: z.number(), ids: z.array(z.number()).min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      await getOwnedDataset(ctx.user.id, input.datasetId);
+      const result = await db
+        .delete(schema.backtestTrades)
+        .where(
+          and(
+            eq(schema.backtestTrades.datasetId, input.datasetId),
+            inArray(schema.backtestTrades.id, input.ids),
+          ),
+        );
+      return { deleted: input.ids.length, result: result.rowsAffected ?? null };
     }),
 
   // Append many trades to an existing dataset (for CSV upload in Phase 2).

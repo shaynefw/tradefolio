@@ -2094,8 +2094,18 @@ function TradeLogTab({
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTrade, setEditingTrade] = useState<typeof dataset.trades[number] | null>(null);
   const [pendingDelete, setPendingDelete] = useState<typeof dataset.trades[number] | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
 
   const utils = trpc.useUtils();
+  function toggleSelected(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
   const deleteMutation = trpc.backtest.trade.delete.useMutation({
     onSuccess: () => {
       if (datasetId != null) {
@@ -2106,6 +2116,18 @@ function TradeLogTab({
       setPendingDelete(null);
     },
     onError: (err) => toast.error(err.message ?? "Failed to delete trade"),
+  });
+  const bulkDeleteMutation = trpc.backtest.trade.bulkDelete.useMutation({
+    onSuccess: (r) => {
+      if (datasetId != null) {
+        utils.backtest.trade.list.invalidate({ datasetId });
+      }
+      utils.backtest.dataset.list.invalidate();
+      toast.success(`Deleted ${r.deleted} trade${r.deleted === 1 ? "" : "s"}`);
+      setSelectedIds(new Set());
+      setPendingBulkDelete(false);
+    },
+    onError: (err) => toast.error(err.message ?? "Failed to delete trades"),
   });
 
   const rows = useMemo(() => {
@@ -2122,6 +2144,26 @@ function TradeLogTab({
 
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   const visible = rows.slice(page * pageSize, (page + 1) * pageSize);
+
+  // Selection is scoped to the currently visible page. "Select all" toggles
+  // every row on this page that has a server id.
+  const visibleIds = visible
+    .map((t) => t.id)
+    .filter((id): id is number => id != null);
+  const allVisibleSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const someVisibleSelected = visibleIds.some((id) => selectedIds.has(id));
+  function toggleSelectAll() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        visibleIds.forEach((id) => next.delete(id));
+      } else {
+        visibleIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  }
 
   return (
     <div className="space-y-4">
@@ -2203,12 +2245,50 @@ function TradeLogTab({
         )}
       </div>
 
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2">
+          <span className="text-sm font-medium">
+            {selectedIds.size} selected
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedIds(new Set())}
+            className="text-xs text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+          >
+            Clear
+          </button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setPendingBulkDelete(true)}
+            disabled={bulkDeleteMutation.isPending}
+            className="ml-auto gap-1.5 border-destructive/40 text-destructive-foreground hover:bg-destructive/10"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete selected
+          </Button>
+        </div>
+      )}
+
       <Card className="bg-card/60">
         <CardContent className="pt-4 pb-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
                 <tr>
+                  <th className="px-3 py-2 text-left w-8">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all on page"
+                      checked={allVisibleSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = !allVisibleSelected && someVisibleSelected;
+                      }}
+                      onChange={toggleSelectAll}
+                      className="h-3.5 w-3.5 accent-primary align-middle"
+                    />
+                  </th>
                   <th className="px-3 py-2 text-left">Date</th>
                   <th className="px-3 py-2 text-left">Time</th>
                   <th className="px-3 py-2 text-left">Side</th>
@@ -2258,6 +2338,23 @@ function TradeLogTab({
                           key={t.index}
                           className="group border-t border-border/40"
                         >
+                          <td
+                            className={cn(
+                              "px-3 py-4 bg-gradient-to-r ring-1 ring-inset",
+                              pendingTheme.bg,
+                              pendingTheme.ring,
+                            )}
+                          >
+                            {t.id != null && (
+                              <input
+                                type="checkbox"
+                                aria-label="Select trade"
+                                checked={selectedIds.has(t.id)}
+                                onChange={() => toggleSelected(t.id!)}
+                                className="h-3.5 w-3.5 accent-primary align-middle"
+                              />
+                            )}
+                          </td>
                           <td
                             colSpan={10}
                             className={cn(
@@ -2344,6 +2441,17 @@ function TradeLogTab({
                           key={t.index}
                           className="group border-t border-border/40"
                         >
+                          <td className="px-3 py-2">
+                            {t.id != null && (
+                              <input
+                                type="checkbox"
+                                aria-label="Select trade"
+                                checked={selectedIds.has(t.id)}
+                                onChange={() => toggleSelected(t.id!)}
+                                className="h-3.5 w-3.5 accent-primary align-middle"
+                              />
+                            )}
+                          </td>
                           <td className="px-3 py-2 whitespace-nowrap">
                             {t.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                           </td>
@@ -2431,7 +2539,18 @@ function TradeLogTab({
                       );
                     })()
                   ) : (
-                  <tr key={t.index} className="group border-t border-border/40 hover:bg-accent/20">
+                  <tr key={t.index} className={cn("group border-t border-border/40 hover:bg-accent/20", t.id != null && selectedIds.has(t.id) && "bg-primary/5")}>
+                    <td className="px-3 py-2">
+                      {t.id != null && (
+                        <input
+                          type="checkbox"
+                          aria-label="Select trade"
+                          checked={selectedIds.has(t.id)}
+                          onChange={() => toggleSelected(t.id!)}
+                          className="h-3.5 w-3.5 accent-primary align-middle"
+                        />
+                      )}
+                    </td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       {t.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </td>
@@ -2620,6 +2739,44 @@ function TradeLogTab({
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleteMutation.isPending ? "Deleting…" : "Delete trade"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk delete confirmation */}
+      <AlertDialog
+        open={pendingBulkDelete}
+        onOpenChange={(o) => !o && setPendingBulkDelete(false)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selectedIds.size} selected trade{selectedIds.size === 1 ? "" : "s"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This can't be undone — metrics on every tab will recompute.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkDeleteMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={bulkDeleteMutation.isPending}
+              onClick={() => {
+                if (datasetId != null && selectedIds.size > 0) {
+                  bulkDeleteMutation.mutate({
+                    datasetId,
+                    ids: Array.from(selectedIds),
+                  });
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {bulkDeleteMutation.isPending
+                ? "Deleting…"
+                : `Delete ${selectedIds.size}`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
