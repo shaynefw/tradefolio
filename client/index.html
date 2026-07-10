@@ -17,9 +17,11 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
 
-    <!-- Open Graph (Facebook, LinkedIn, Discord, iMessage, Slack, etc.) -->
+    <!-- Open Graph (Facebook, LinkedIn, Discord, iMessage, Slack, etc.)
+         NOTE: image + url are ABSOLUTE — crawlers drop relative image URLs. -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Tradefolio" />
+    <meta property="og:url" content="https://tradefolio-nu.vercel.app/" />
     <meta
       property="og:title"
       content="Tradefolio — Trading journal &amp; performance analytics"
@@ -28,22 +30,21 @@
       property="og:description"
       content="Track every trade, visualise your P&amp;L, and review your performance with a clean trading journal built for serious traders."
     />
-    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:image" content="https://tradefolio-nu.vercel.app/og-image.png" />
+    <meta property="og:image:secure_url" content="https://tradefolio-nu.vercel.app/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Tradefolio — Trading journal & performance analytics" />
 
     <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta
-      name="twitter:title"
-      content="Tradefolio — Trading journal &amp; performance analytics"
-    />
+    <meta name="twitter:title" content="Tradefolio — Trading journal &amp; performance analytics" />
     <meta
       name="twitter:description"
       content="Track every trade, visualise your P&amp;L, and review your performance with a clean trading journal built for serious traders."
     />
-    <meta name="twitter:image" content="/og-image.png" />
+    <meta name="twitter:image" content="https://tradefolio-nu.vercel.app/og-image.png" />
   </head>
   <body>
     <div id="root"></div>
