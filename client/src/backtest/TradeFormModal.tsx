@@ -227,21 +227,34 @@ export function TradeFormModal({
   // below the first level, or when the level lacks that specific risk
   // (e.g. R2 = n/a on a Speed level). Skips edit mode by default so
   // recorded PnLs aren't clobbered.
+  // The balance this trade is sized against: when adding, it's the current
+  // end-of-series balance; when editing, it's the balance just BEFORE this
+  // trade (so the level reflects where the account stood at entry, matching
+  // the "Before this trade" hint). Everything scaling-related — level badge,
+  // preview chips, and auto-fill — reads from this so they stay consistent.
+  const premiumRefBalance =
+    isEdit && editingTrade
+      ? premiumSeries.points[editingTrade.index - 1]?.balance ??
+        premiumSeries.start
+      : premiumSeries.end;
+  const speedRefBalance =
+    isEdit && editingTrade
+      ? speedSeries.points[editingTrade.index - 1]?.balance ??
+        speedSeries.start
+      : speedSeries.end;
+
   useEffect(() => {
     if (!open || isEdit) return;
     if (form.isPending) return;
-    // Balance at trade entry — for a new trade this is the current series end.
-    const premiumBal = premiumSeries.end;
-    const speedBal = speedSeries.end;
     const outcome = (form.outcome || null) as Outcome | null;
     const premiumSug = suggestedPnl(
-      premiumBal,
+      premiumRefBalance,
       premiumSchedule,
       outcome,
       form.recoveryStage,
     );
     const speedSug = suggestedPnl(
-      speedBal,
+      speedRefBalance,
       speedSchedule,
       outcome,
       form.recoveryStage,
@@ -257,21 +270,20 @@ export function TradeFormModal({
     form.isPending,
     form.outcome,
     form.recoveryStage,
-    premiumSeries.end,
-    speedSeries.end,
+    premiumRefBalance,
+    speedRefBalance,
     premiumSchedule,
     speedSchedule,
   ]);
 
-  // Look up the current level for both scalings so the modal can show a
-  // "you're at s2 · profit $160" hint above each PnL input.
+  // Level for each scaling at this trade's reference balance.
   const premiumLevel = useMemo(
-    () => findCurrentLevel(premiumSeries.end, premiumSchedule),
-    [premiumSeries.end, premiumSchedule],
+    () => findCurrentLevel(premiumRefBalance, premiumSchedule),
+    [premiumRefBalance, premiumSchedule],
   );
   const speedLevel = useMemo(
-    () => findCurrentLevel(speedSeries.end, speedSchedule),
-    [speedSeries.end, speedSchedule],
+    () => findCurrentLevel(speedRefBalance, speedSchedule),
+    [speedRefBalance, speedSchedule],
   );
 
   const utils = trpc.useUtils();
