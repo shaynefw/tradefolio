@@ -26,10 +26,15 @@ export interface CoreSummary {
   avgMaeWinners: number;
   avgMfeLosers: number;
   avgMaeLosers: number;
-  // 4:1 profit factor — the dataset's actual strategy uses a 1:4 win:loss
-  // dollar ratio (e.g. +$80 per win, -$320 per loss). Computed against unit R
-  // so it stays meaningful even before user supplies real dollar sizing.
-  profitFactor41: number;
+  // Profit factor derived from the dataset's own take-profit / stop distances:
+  //   PF = (wins × TP) / (losses × stop)
+  // so it self-adjusts to each strategy's reward:risk instead of assuming a
+  // fixed ratio. tpPoints/slPoints/rewardRisk are surfaced so the UI can
+  // label the card with the actual R:R.
+  profitFactor: number;
+  tpPoints: number;
+  slPoints: number;
+  rewardRisk: number; // TP ÷ stop, e.g. 1.25 for 200/160
   // Average net wins per calendar month spanned (wins − losses ÷ months).
   // Matches the source spreadsheet's "Avg Net Wins/m".
   avgNetWinsPerMonth: number;
@@ -65,10 +70,14 @@ export function computeCoreSummary(ds: BacktestDataset): CoreSummary {
   const loserMfes = nonNull(losses.map((t) => t.mfe));
   const loserMaes = nonNull(losses.map((t) => t.mae));
 
-  // 1:4 dollar ratio — wins pay 1R, losses lose 4R, in unit R.
-  const grossWinR = wins.length * 1;
-  const grossLossR = losses.length * 4;
-  const profitFactor41 = grossLossR > 0 ? grossWinR / grossLossR : grossWinR > 0 ? Infinity : 0;
+  // Profit factor from the dataset's TP/stop distances (points).
+  const tpPoints = ds.takeProfitBricks * ds.brickPoints;
+  const slPoints = ds.stopBricks * ds.brickPoints;
+  const rewardRisk = slPoints > 0 ? tpPoints / slPoints : 0;
+  const grossWin = wins.length * tpPoints;
+  const grossLoss = losses.length * slPoints;
+  const profitFactor =
+    grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? Infinity : 0;
 
   // Span in distinct YYYY-MM buckets — partial months count as 1 month each,
   // mirroring how the source spreadsheet counts.
@@ -98,7 +107,10 @@ export function computeCoreSummary(ds: BacktestDataset): CoreSummary {
     avgMaeWinners: Math.round(mean(winnerMaes)),
     avgMfeLosers: Math.round(mean(loserMfes)),
     avgMaeLosers: Math.round(mean(loserMaes)),
-    profitFactor41,
+    profitFactor,
+    tpPoints,
+    slPoints,
+    rewardRisk,
     avgNetWinsPerMonth,
     monthsSpanned,
   };

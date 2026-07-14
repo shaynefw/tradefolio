@@ -546,6 +546,7 @@ export default function Backtest() {
             datasetId={activeMeta.id}
             stopBricks={activeMeta.stopBricks}
             brickPoints={activeMeta.brickPoints}
+            takeProfitBricks={activeMeta.takeProfitBricks}
             shareToken={(activeMeta as { shareToken?: string | null }).shareToken ?? null}
             initial={{
               premiumStartBalance: activeMeta.premiumStartBalance ?? null,
@@ -703,6 +704,7 @@ function DatasetSettingsDialog({
   datasetId,
   stopBricks,
   brickPoints,
+  takeProfitBricks,
   shareToken,
   initial,
 }: {
@@ -711,6 +713,7 @@ function DatasetSettingsDialog({
   datasetId: number;
   stopBricks: number;
   brickPoints: number;
+  takeProfitBricks: number;
   shareToken: string | null;
   initial: DatasetSettingsInitial;
 }) {
@@ -721,6 +724,10 @@ function DatasetSettingsDialog({
   const [rrRows, setRrRows] = useState<RrRow[]>([]);
   const [premiumSchedule, setPremiumSchedule] = useState<ScalingSchedule>([]);
   const [speedSchedule, setSpeedSchedule] = useState<ScalingSchedule>([]);
+  // Strategy params edited in points; converted to bricks on save.
+  const [brickPts, setBrickPts] = useState("");
+  const [tpPts, setTpPts] = useState("");
+  const [slPts, setSlPts] = useState("");
 
   // Re-sync when opened (or the underlying dataset switches).
   useEffect(() => {
@@ -742,6 +749,9 @@ function DatasetSettingsDialog({
     );
     setPremiumSchedule(initial.premiumScalingSchedule ?? []);
     setSpeedSchedule(initial.speedScalingSchedule ?? []);
+    setBrickPts(String(brickPoints));
+    setTpPts(String(takeProfitBricks * brickPoints));
+    setSlPts(String(stopBricks * brickPoints));
   }, [
     open,
     initial.premiumStartBalance,
@@ -752,6 +762,7 @@ function DatasetSettingsDialog({
     initial.speedScalingSchedule,
     stopBricks,
     brickPoints,
+    takeProfitBricks,
   ]);
 
   const mutation = trpc.backtest.dataset.update.useMutation({
@@ -861,8 +872,16 @@ function DatasetSettingsDialog({
           String(b.tpPoints) === defaults[i].tp &&
           String(b.stopPoints) === defaults[i].stop,
       );
+    // Strategy params: edit in points, store as bricks (rounded to nearest).
+    const bp = Math.max(1, Math.round(Number(brickPts) || brickPoints));
+    const tpB = Math.max(1, Math.round((Number(tpPts) || 0) / bp));
+    const slB = Math.max(1, Math.round((Number(slPts) || 0) / bp));
+
     mutation.mutate({
       id: datasetId,
+      brickPoints: bp,
+      takeProfitBricks: tpB,
+      stopBricks: slB,
       premiumStartBalance: parseDollar(premium),
       speedStartBalance: parseDollar(speed),
       notes: notes.trim() === "" ? null : notes.trim(),
@@ -897,6 +916,48 @@ function DatasetSettingsDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSave} className="space-y-6">
+          {/* Strategy params — drive the Profit Factor & RR label */}
+          <section className="space-y-2">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">
+              Strategy — take profit / stop
+            </p>
+            <div className="grid grid-cols-3 gap-3">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted-foreground">Take profit (pts)</span>
+                <input
+                  type="number" step="any" min={1} value={tpPts}
+                  onChange={(e) => setTpPts(e.target.value)}
+                  className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted-foreground">Stop loss (pts)</span>
+                <input
+                  type="number" step="any" min={1} value={slPts}
+                  onChange={(e) => setSlPts(e.target.value)}
+                  className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs text-muted-foreground">Brick size (pts)</span>
+                <input
+                  type="number" step="any" min={1} value={brickPts}
+                  onChange={(e) => setBrickPts(e.target.value)}
+                  className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Reward:risk ={" "}
+              <span className="font-medium text-foreground">
+                {Number(slPts) > 0
+                  ? `1:${(Number(tpPts) / Number(slPts)).toFixed(2).replace(/\.?0+$/, "")}`
+                  : "—"}
+              </span>
+              . Drives the Profit Factor card. Rounded to the nearest brick on save.
+            </p>
+          </section>
+
           {/* Scaling */}
           <section className="space-y-2">
             <p className="text-xs uppercase tracking-wider text-muted-foreground">
@@ -1413,13 +1474,13 @@ export function OverviewTab({
           sub={`${core.wins}W / ${core.losses}L`}
         />
         <StatCard
-          label="Profit Factor (4:1)"
+          label={`Profit Factor (${core.rewardRisk ? `1:${core.rewardRisk.toFixed(2).replace(/\.?0+$/, "")}` : "—"})`}
           value={
-            <span className={core.profitFactor41 >= 1 ? "text-green-400" : "text-red-400"}>
-              {core.profitFactor41 === Infinity ? "∞" : core.profitFactor41.toFixed(2)}
+            <span className={core.profitFactor >= 1 ? "text-green-400" : "text-red-400"}>
+              {core.profitFactor === Infinity ? "∞" : core.profitFactor.toFixed(2)}
             </span>
           }
-          sub="Wins × 1R / Losses × 4R"
+          sub={`TP ${core.tpPoints} / SL ${core.slPoints} pts`}
         />
         <StatCard
           label="Long / Short WR"
