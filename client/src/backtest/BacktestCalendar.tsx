@@ -181,7 +181,7 @@ export function BacktestCalendar({ dataset }: { dataset: BacktestDataset }) {
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="w-40 text-center text-sm font-semibold tabular-nums">
+          <span className="w-28 text-center text-sm font-semibold tabular-nums sm:w-40">
             {format(currentMonth, "MMMM yyyy")}
           </span>
           <Button
@@ -202,7 +202,7 @@ export function BacktestCalendar({ dataset }: { dataset: BacktestDataset }) {
           </Button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1 rounded-md border border-border bg-card/60 p-0.5">
             {(["premium", "speed"] as Scaling[]).map((s) => (
               <button
@@ -238,7 +238,7 @@ export function BacktestCalendar({ dataset }: { dataset: BacktestDataset }) {
       <Card className="bg-card/60 overflow-hidden">
         <CardContent className="p-0">
           {/* Day-of-week header + weekly column */}
-          <div className="grid grid-cols-[repeat(7,1fr)_minmax(90px,0.8fr)] border-b border-border">
+          <div className="grid grid-cols-7 sm:grid-cols-[repeat(7,1fr)_minmax(90px,0.8fr)] border-b border-border">
             {DOW_LABELS.map((d) => (
               <div
                 key={d}
@@ -247,7 +247,7 @@ export function BacktestCalendar({ dataset }: { dataset: BacktestDataset }) {
                 {d}
               </div>
             ))}
-            <div className="py-2 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider border-l border-border">
+            <div className="hidden sm:block py-2 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider border-l border-border">
               Weekly
             </div>
           </div>
@@ -256,7 +256,7 @@ export function BacktestCalendar({ dataset }: { dataset: BacktestDataset }) {
           {Array.from({ length: 6 }, (_, row) => (
             <div
               key={row}
-              className="grid grid-cols-[repeat(7,1fr)_minmax(90px,0.8fr)]"
+              className="grid grid-cols-7 sm:grid-cols-[repeat(7,1fr)_minmax(90px,0.8fr)]"
             >
               {grid.slice(row * 7, row * 7 + 7).map((cell, colIdx) => {
                 const stats = cell.date
@@ -319,8 +319,8 @@ export function BacktestCalendar({ dataset }: { dataset: BacktestDataset }) {
                   </div>
                 );
               })}
-              {/* Weekly total */}
-              <div className="min-h-[85px] border-b border-l border-border p-2 text-center">
+              {/* Weekly total (hidden on phones to keep 7 day columns fluid) */}
+              <div className="hidden sm:block min-h-[85px] border-b border-l border-border p-2 text-center">
                 {weeklyTotals[row].count > 0 && (
                   <div className="flex h-full flex-col items-center justify-center">
                     <span

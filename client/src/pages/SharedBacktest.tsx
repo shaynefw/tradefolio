@@ -117,7 +117,7 @@ export default function SharedBacktest() {
             )}
 
             <Tabs defaultValue="overview">
-              <TabsList className="bg-card/60">
+              <TabsList className="bg-card/60 max-w-full justify-start overflow-x-auto">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="timing">Timing / Sequence</TabsTrigger>
                 <TabsTrigger value="scaling">Scaling</TabsTrigger>

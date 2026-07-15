@@ -528,8 +528,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         onMobileClose={() => setMobileOpen(false)}
       />
 
-      {/* Main content — offset by sidebar width on md+; full width on mobile */}
-      <div className="flex min-h-screen flex-1 flex-col md:ml-60">
+      {/* Main content — offset by sidebar width on md+; full width on mobile.
+          min-w-0 lets flex/grid children shrink to the viewport (without it an
+          intrinsically-wide child like a tab bar or table forces the whole
+          page wider than the screen on mobile). */}
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col md:ml-60">
         {/* Mobile top bar */}
         <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-card/95 px-4 backdrop-blur md:hidden">
           <Button
@@ -551,7 +554,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         </header>
 
-        <main className="flex flex-1 flex-col overflow-y-auto">
+        <main className="flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
           {children}
         </main>
       </div>

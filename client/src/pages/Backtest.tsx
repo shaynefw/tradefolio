@@ -562,7 +562,7 @@ export default function Backtest() {
         {/* Ready to render */}
         {ds && core && (
           <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
-            <TabsList className="bg-card/60">
+            <TabsList className="bg-card/60 max-w-full justify-start overflow-x-auto">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="timing">Timing / Sequence</TabsTrigger>
               <TabsTrigger value="scaling">Scaling</TabsTrigger>
@@ -907,7 +907,7 @@ function DatasetSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl w-[95vw] bg-card max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl w-[95vw] bg-card max-h-[90vh] overflow-x-hidden overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Dataset settings</DialogTitle>
           <DialogDescription>
@@ -915,13 +915,13 @@ function DatasetSettingsDialog({
             buckets — all in one place.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSave} className="space-y-6">
+        <form onSubmit={handleSave} className="min-w-0 space-y-6">
           {/* Strategy params — drive the Profit Factor & RR label */}
-          <section className="space-y-2">
+          <section className="min-w-0 space-y-2">
             <p className="text-xs uppercase tracking-wider text-muted-foreground">
               Strategy — take profit / stop
             </p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <label className="flex flex-col gap-1 text-sm">
                 <span className="text-xs text-muted-foreground">Take profit (pts)</span>
                 <input
@@ -1021,8 +1021,8 @@ function DatasetSettingsDialog({
               Each row defines a TP / Stop pair (in points). RR is computed as
               TP ÷ Stop and WR/Ez$/Trades populate from your trade data.
             </p>
-            <div className="overflow-hidden rounded-md border border-border">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto rounded-md border border-border">
+              <table className="w-full min-w-[26rem] text-sm">
                 <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2 text-right">TP (pts)</th>
@@ -1626,7 +1626,7 @@ function ScalingSummary({
               {positive ? "+" : ""}
               {formatCurrency(series.netPnl)}
               {series.start > 0 && (
-                <span className="ml-1.5 text-xs opacity-80">
+                <span className="ml-1.5 inline-block text-xs opacity-80">
                   ({series.netPnl >= 0 ? "+" : ""}
                   {((series.netPnl / series.start) * 100).toFixed(1)}%)
                 </span>
@@ -1740,7 +1740,7 @@ export function TimingTab({
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-            <div className="mt-2 grid grid-cols-9 gap-1 px-12 text-center text-[10px] text-muted-foreground">
+            <div className="mt-2 grid grid-cols-9 gap-0.5 px-2 text-center text-[9px] sm:gap-1 sm:px-12 sm:text-[10px] text-muted-foreground">
               {hourData.map((d) => (
                 <div key={d.hour} title={`${d.trades} trades`}>
                   n={d.trades}
@@ -1902,8 +1902,8 @@ export function TimingTab({
           />
           <Card className="bg-card/60">
             <CardContent className="pt-5 pb-5">
-              <div className="overflow-hidden rounded-md border border-border">
-                <table className="w-full text-sm">
+              <div className="overflow-x-auto rounded-md border border-border">
+                <table className="w-full min-w-[30rem] text-sm">
                   <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
                     <tr>
                       <th className="px-3 py-2 text-left">RR</th>
@@ -2117,7 +2117,7 @@ function ScalingChart({
                 {series.netPnl >= 0 ? "+" : ""}
                 {formatCurrency(series.netPnl)}
                 {series.start > 0 && (
-                  <span className="ml-1.5 text-xs opacity-80">
+                  <span className="ml-1.5 inline-block text-xs opacity-80">
                     ({series.netPnl >= 0 ? "+" : ""}
                     {((series.netPnl / series.start) * 100).toFixed(1)}%)
                   </span>
