@@ -497,6 +497,7 @@ export function TradeFormModal({
                 <option value="">— (open / live)</option>
                 <option value="Took Profit">Took Profit</option>
                 <option value="Took Loss">Took Loss</option>
+                <option value="Breakeven">Breakeven</option>
               </select>
               <span className="text-[10px] text-muted-foreground">
                 Leave open to mark as live — fill in MAE/MFE/outcome after the trade closes.

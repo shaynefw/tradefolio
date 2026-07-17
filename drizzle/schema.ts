@@ -161,7 +161,7 @@ export const backtestTrades = sqliteTable("backtest_trades", {
   side: text("side", { enum: ["LONG", "SHORT"] }).notNull(),
   tradeNo: integer("trade_no").default(0).notNull(),
   validEntry: integer("valid_entry", { mode: "boolean" }).default(true).notNull(),
-  outcome: text("outcome", { enum: ["Took Profit", "Took Loss"] }), // null = pending
+  outcome: text("outcome", { enum: ["Took Profit", "Took Loss", "Breakeven"] }), // null = pending
   mae: real("mae"), // points
   mfe: real("mfe"), // points
   recoveryStage: text("recovery_stage", { enum: ["none", "first", "second"] })

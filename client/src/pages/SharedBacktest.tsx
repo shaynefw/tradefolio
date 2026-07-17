@@ -191,7 +191,7 @@ function SharedTradeLog({ dataset }: { dataset: NonNullable<ReturnType<typeof bu
               <td className="px-3 py-2 text-right tabular-nums">{t.mae ?? "—"}</td>
               <td className="px-3 py-2 text-right tabular-nums">{t.mfe ?? "—"}</td>
               <td className="px-3 py-2">
-                <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium", t.outcome === "Took Profit" ? "bg-emerald-500/15 text-emerald-300" : t.outcome === "Took Loss" ? "bg-red-500/15 text-red-300" : "bg-muted/40 text-muted-foreground")}>
+                <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium", t.outcome === "Took Profit" ? "bg-emerald-500/15 text-emerald-300" : t.outcome === "Took Loss" ? "bg-red-500/15 text-red-300" : t.outcome === "Breakeven" ? "bg-slate-500/20 text-slate-300" : "bg-muted/40 text-muted-foreground")}>
                   {t.outcome ?? "—"}
                 </span>
               </td>

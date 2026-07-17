@@ -29,7 +29,7 @@ export interface SeedTradeInput {
   side: Side;
   tradeNo: number;
   validEntry: boolean;
-  outcome: "Took Profit" | "Took Loss" | null;
+  outcome: "Took Profit" | "Took Loss" | "Breakeven" | null;
   mae: number | null;
   mfe: number | null;
   recoveryStage: RecoveryStage;
@@ -119,7 +119,7 @@ export interface ServerTradeRow {
   side: Side;
   tradeNo: number;
   validEntry: boolean;
-  outcome: "Took Profit" | "Took Loss" | null;
+  outcome: "Took Profit" | "Took Loss" | "Breakeven" | null;
   mae: number | null;
   mfe: number | null;
   recoveryStage: RecoveryStage;

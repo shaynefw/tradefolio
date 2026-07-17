@@ -14,7 +14,7 @@ import { db, schema } from "../db.js";
 // ---------------------------------------------------------------------------
 
 const sideEnum = z.enum(["LONG", "SHORT"]);
-const outcomeEnum = z.enum(["Took Profit", "Took Loss"]);
+const outcomeEnum = z.enum(["Took Profit", "Took Loss", "Breakeven"]);
 const recoveryEnum = z.enum(["none", "first", "second"]);
 
 // Trade input shared by create + bulkInsert + update (with partials below).
@@ -141,9 +141,10 @@ function findLevel(
 function pnlFromSchedule(
   balance: number,
   schedule: ScheduleLevel[],
-  outcome: "Took Profit" | "Took Loss",
+  outcome: "Took Profit" | "Took Loss" | "Breakeven",
   recoveryStage: "none" | "first" | "second",
 ): number | null {
+  if (outcome === "Breakeven") return 0;
   const lvl = findLevel(balance, schedule);
   if (!lvl) return null;
   if (outcome === "Took Profit") {

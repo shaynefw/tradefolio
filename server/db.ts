@@ -109,7 +109,7 @@ export async function initDb() {
       side TEXT NOT NULL CHECK(side IN ('LONG', 'SHORT')),
       trade_no INTEGER NOT NULL DEFAULT 0,
       valid_entry INTEGER NOT NULL DEFAULT 1,
-      outcome TEXT CHECK(outcome IN ('Took Profit', 'Took Loss') OR outcome IS NULL),
+      outcome TEXT CHECK(outcome IN ('Took Profit', 'Took Loss', 'Breakeven') OR outcome IS NULL),
       mae REAL,
       mfe REAL,
       recovery_stage TEXT NOT NULL DEFAULT 'none' CHECK(recovery_stage IN ('none', 'first', 'second')),
@@ -163,6 +163,62 @@ export async function initDb() {
     "TEXT",
   );
   await addColumnIfMissing("backtest_datasets", "share_token", "TEXT");
+  await migrateOutcomeAllowBreakeven();
+}
+
+// SQLite can't ALTER a CHECK constraint, so relaxing `outcome` to allow
+// 'Breakeven' requires a table rebuild. Guarded by the old CHECK text so it
+// runs exactly once (and never on fresh DBs, whose CREATE already allows it).
+async function migrateOutcomeAllowBreakeven() {
+  const res = await client.execute(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='backtest_trades'",
+  );
+  const sql = res.rows[0]?.sql ? String(res.rows[0].sql) : "";
+  if (!sql || !sql.includes("outcome IN ('Took Profit', 'Took Loss')")) return;
+
+  const cols =
+    "id, dataset_id, sequence_idx, date, time, side, trade_no, valid_entry, " +
+    "outcome, mae, mfe, recovery_stage, premium_pnl, premium_balance, premium_label, " +
+    "speed_pnl, speed_balance, speed_label, notes, created_at, updated_at, " +
+    "premium_reset_balance, speed_reset_balance, is_pending";
+
+  // batch() runs atomically in a transaction — if any step fails the table is
+  // left untouched and the migration retries next boot.
+  await client.batch(
+    [
+      `CREATE TABLE backtest_trades_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        dataset_id INTEGER NOT NULL REFERENCES backtest_datasets(id) ON DELETE CASCADE,
+        sequence_idx INTEGER NOT NULL,
+        date INTEGER NOT NULL,
+        time TEXT NOT NULL DEFAULT '',
+        side TEXT NOT NULL CHECK(side IN ('LONG', 'SHORT')),
+        trade_no INTEGER NOT NULL DEFAULT 0,
+        valid_entry INTEGER NOT NULL DEFAULT 1,
+        outcome TEXT CHECK(outcome IN ('Took Profit', 'Took Loss', 'Breakeven') OR outcome IS NULL),
+        mae REAL,
+        mfe REAL,
+        recovery_stage TEXT NOT NULL DEFAULT 'none' CHECK(recovery_stage IN ('none', 'first', 'second')),
+        premium_pnl REAL,
+        premium_balance REAL,
+        premium_label TEXT,
+        speed_pnl REAL,
+        speed_balance REAL,
+        speed_label TEXT,
+        notes TEXT,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+        updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+        premium_reset_balance REAL,
+        speed_reset_balance REAL,
+        is_pending INTEGER NOT NULL DEFAULT 0
+      )`,
+      `INSERT INTO backtest_trades_new (${cols}) SELECT ${cols} FROM backtest_trades`,
+      `DROP TABLE backtest_trades`,
+      `ALTER TABLE backtest_trades_new RENAME TO backtest_trades`,
+      `CREATE INDEX IF NOT EXISTS idx_backtest_trades_dataset ON backtest_trades(dataset_id, sequence_idx)`,
+    ],
+    "write",
+  );
 }
 
 async function addColumnIfMissing(

@@ -61,6 +61,7 @@ export function suggestedPnl(
   recoveryStage: RecoveryStage,
 ): number | null {
   if (!outcome) return null;
+  if (outcome === "Breakeven") return 0;
   const level = findCurrentLevel(balance, schedule);
   if (!level) return null;
   if (outcome === "Took Profit") {

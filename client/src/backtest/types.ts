@@ -6,7 +6,7 @@
 // and the UI.
 
 export type Side = "LONG" | "SHORT";
-export type Outcome = "Took Profit" | "Took Loss";
+export type Outcome = "Took Profit" | "Took Loss" | "Breakeven";
 
 // Recovery stage of a single trade.
 //   - "first":  the planned re-entry after a paper loss (the source spreadsheet

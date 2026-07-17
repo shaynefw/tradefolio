@@ -418,6 +418,8 @@ export function BacktestCalendar({ dataset }: { dataset: BacktestDataset }) {
                               "rounded px-1.5 py-0.5 text-[10px] font-medium",
                               t.outcome === "Took Profit"
                                 ? "bg-emerald-500/15 text-emerald-300"
+                                : t.outcome === "Breakeven"
+                                ? "bg-slate-500/20 text-slate-300"
                                 : "bg-red-500/15 text-red-300",
                             )}
                           >

@@ -44,6 +44,10 @@ export interface CoreSummary {
 const valid = (t: BacktestTrade) => t.validEntry;
 const winners = (t: BacktestTrade) => valid(t) && t.outcome === "Took Profit";
 const losers = (t: BacktestTrade) => valid(t) && t.outcome === "Took Loss";
+// Breakeven trades are closed but neither win nor loss — excluded from every
+// win-rate denominator and contribute 0 to profit factor. Only TP/TL count.
+const isDecisive = (t: BacktestTrade) =>
+  t.outcome === "Took Profit" || t.outcome === "Took Loss";
 
 const mean = (xs: number[]) =>
   xs.length === 0 ? 0 : xs.reduce((s, n) => s + n, 0) / xs.length;
@@ -57,6 +61,8 @@ export function computeCoreSummary(ds: BacktestDataset): CoreSummary {
   const shorts = validTrades.filter((t) => t.side === "SHORT");
   const longWins = longs.filter((t) => t.outcome === "Took Profit").length;
   const shortWins = shorts.filter((t) => t.outcome === "Took Profit").length;
+  const longDecisive = longs.filter(isDecisive).length;
+  const shortDecisive = shorts.filter(isDecisive).length;
 
   const streaks = computeStreaks(validTrades);
 
@@ -98,8 +104,8 @@ export function computeCoreSummary(ds: BacktestDataset): CoreSummary {
     winRate: decisive > 0 ? wins.length / decisive : 0,
     longCount: longs.length,
     shortCount: shorts.length,
-    longWinRate: longs.length > 0 ? longWins / longs.length : 0,
-    shortWinRate: shorts.length > 0 ? shortWins / shorts.length : 0,
+    longWinRate: longDecisive > 0 ? longWins / longDecisive : 0,
+    shortWinRate: shortDecisive > 0 ? shortWins / shortDecisive : 0,
     maxWinStreak: streaks.maxWin,
     maxLossStreak: streaks.maxLoss,
     avgWinStreak: streaks.avgWin,
@@ -180,7 +186,7 @@ const HOUR_LABEL = (h: number) => {
 export function computeByHour(ds: BacktestDataset): HourBucket[] {
   const map = new Map<number, HourBucket>();
   for (const t of ds.trades) {
-    if (!t.validEntry || !t.outcome) continue;
+    if (!t.validEntry || !isDecisive(t)) continue;
     const bucket =
       map.get(t.hour) ??
       ({
@@ -222,7 +228,7 @@ export interface TradeNoBucket {
 export function computeByTradeNo(ds: BacktestDataset): TradeNoBucket[] {
   const map = new Map<number, TradeNoBucket>();
   for (const t of ds.trades) {
-    if (!t.validEntry || !t.outcome || t.tradeNo === 0) continue;
+    if (!t.validEntry || !isDecisive(t) || t.tradeNo === 0) continue;
     const bucket =
       map.get(t.tradeNo) ??
       ({
@@ -364,8 +370,8 @@ export interface RecoveryStats {
 
 export function computeRecoveryStats(ds: BacktestDataset): RecoveryStats {
   const valid = ds.trades.filter((t) => t.validEntry);
-  const firsts = valid.filter((t) => t.recoveryStage === "first");
-  const seconds = valid.filter((t) => t.recoveryStage === "second");
+  const firsts = valid.filter((t) => t.recoveryStage === "first" && isDecisive(t));
+  const seconds = valid.filter((t) => t.recoveryStage === "second" && isDecisive(t));
   const firstWins = firsts.filter((t) => t.outcome === "Took Profit").length;
   const secondWins = seconds.filter((t) => t.outcome === "Took Profit").length;
   const totalCount = firsts.length + seconds.length;
@@ -563,7 +569,7 @@ export interface SideSummary {
 export function computeBySide(ds: BacktestDataset): SideSummary[] {
   const out: SideSummary[] = (["LONG", "SHORT"] as Side[]).map((side) => {
     const rows = ds.trades.filter(
-      (t) => t.validEntry && t.side === side && t.outcome != null,
+      (t) => t.validEntry && t.side === side && isDecisive(t),
     );
     const wins = rows.filter((t) => t.outcome === "Took Profit").length;
     const losses = rows.length - wins;

@@ -2747,6 +2747,8 @@ function TradeLogTab({
                             ? "bg-emerald-500/15 text-emerald-300"
                             : t.outcome === "Took Loss"
                             ? "bg-red-500/15 text-red-300"
+                            : t.outcome === "Breakeven"
+                            ? "bg-slate-500/20 text-slate-300"
                             : "bg-muted/40 text-muted-foreground",
                         )}
                       >
