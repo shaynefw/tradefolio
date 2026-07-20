@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Calculator, AlertTriangle, Info } from "lucide-react";
+import { Calculator, AlertTriangle, Info, TrendingUp } from "lucide-react";
 
 import DashboardLayout from "../components/DashboardLayout";
 import { Card, CardContent } from "../components/ui/card";
@@ -108,6 +108,41 @@ export default function SizeCalculator() {
     const rr = stop > 0 && tp > 0 ? tp / stop : 0;
     const targetProfit = contracts * rewardPerContract;
 
+    // Scale-up ladder: `unit` is the extra base needed for each additional
+    // contract (base at which floor() ticks up). Net wins to reach each tier
+    // are stepped realistically — you trade the larger size as you climb, so
+    // higher tiers arrive faster per dollar. A "net win" = one win beyond a
+    // loss (wins − losses); it needs a target to know the per-win dollars.
+    const unit = riskPct > 0 && riskPerContract > 0 ? riskPerContract / (riskPct / 100) : 0;
+    const tiers: {
+      size: number;
+      threshold: number;
+      addFromCurrent: number;
+      netWins: number | null;
+      tradeable: boolean;
+    }[] = [];
+    if (unit > 0) {
+      let cursor = base;
+      let size = contracts;
+      let winsAccum = 0;
+      let tradeable = true;
+      for (let m = contracts + 1; m <= contracts + 3; m++) {
+        const threshold = m * unit;
+        const segDollars = threshold - cursor;
+        if (size <= 0) tradeable = false; // can't grow by trading with 0 contracts
+        else if (rewardPerContract > 0) winsAccum += segDollars / (size * rewardPerContract);
+        tiers.push({
+          size: m,
+          threshold,
+          addFromCurrent: threshold - base,
+          netWins: rewardPerContract > 0 && tradeable ? Math.ceil(winsAccum) : null,
+          tradeable,
+        });
+        cursor = threshold;
+        size = m;
+      }
+    }
+
     return {
       balance,
       base,
@@ -124,6 +159,8 @@ export default function SizeCalculator() {
       rewardPerContract,
       targetProfit,
       tp,
+      unit,
+      tiers,
     };
   }, [s, perPoint]);
 
@@ -343,6 +380,84 @@ export default function SizeCalculator() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Scale-up preview */}
+        {calc.unit > 0 && calc.tiers.length > 0 && (
+          <Card className="bg-card/60">
+            <CardContent className="pt-5 pb-5">
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingUp className="h-4 w-4 text-primary" />
+                <h2 className="text-sm font-semibold">Scale-up preview</h2>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                The {s.propMode ? "buffer" : "balance"} at which you earn each
+                additional contract, and the net winning trades (wins − losses)
+                to get there from where you are — trading the larger size as you
+                climb.
+              </p>
+              <div className="overflow-x-auto rounded-md border border-border">
+                <table className="w-full min-w-[30rem] text-sm">
+                  <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Size</th>
+                      <th className="px-3 py-2 text-right">
+                        {s.propMode ? "Buffer" : "Balance"} needed
+                      </th>
+                      <th className="px-3 py-2 text-right">+ from here</th>
+                      <th className="px-3 py-2 text-right">Net wins (W−L)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {calc.tiers.map((t, i) => (
+                      <tr
+                        key={t.size}
+                        className={cn(
+                          "border-t border-border/40",
+                          i === 0 && "bg-primary/5",
+                        )}
+                      >
+                        <td className="px-3 py-2 font-medium tabular-nums">
+                          {t.size} ct
+                          {i === 0 && (
+                            <span className="ml-1.5 text-xs font-normal text-primary">
+                              next
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {money(t.threshold)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                          +{money(t.addFromCurrent)}
+                        </td>
+                        <td
+                          className={cn(
+                            "px-3 py-2 text-right tabular-nums font-semibold",
+                            t.netWins !== null ? "text-green-400" : "text-muted-foreground",
+                          )}
+                        >
+                          {t.netWins !== null ? t.netWins : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {calc.rewardPerContract <= 0 ? (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Enter a <span className="font-medium text-foreground/80">target</span>{" "}
+                  above to see how many net wins each tier takes.
+                </p>
+              ) : calc.contracts === 0 ? (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  You can't trade a contract yet, so growth has to come from
+                  adding to the account — net wins apply once you're sizing at
+                  least 1 contract.
+                </p>
+              ) : null}
+            </CardContent>
+          </Card>
+        )}
 
         <p className="text-xs text-muted-foreground max-w-2xl">
           Formula: <span className="font-mono text-foreground/80">contracts = floor( (risk% × base) ÷ (stop points × $/point) )</span>.
