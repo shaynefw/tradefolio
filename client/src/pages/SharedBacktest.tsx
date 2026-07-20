@@ -17,6 +17,7 @@ import {
   computeRecoveryStats,
   computeRrBuckets,
   computeScaling,
+  computeTargetLadder,
 } from "../backtest/calculations";
 import { BacktestCalendar } from "../backtest/BacktestCalendar";
 import { OverviewTab, TimingTab, ScalingTab } from "./Backtest";
@@ -44,6 +45,10 @@ export default function SharedBacktest() {
   const byTradeNo = useMemo(() => (ds ? computeByTradeNo(ds) : []), [ds]);
   const bySide = useMemo(() => (ds ? computeBySide(ds) : []), [ds]);
   const rr = useMemo(() => (ds ? computeRrBuckets(ds) : []), [ds]);
+  const targetLadder = useMemo(
+    () => (ds ? computeTargetLadder(ds) : []),
+    [ds],
+  );
   const recovery = useMemo(
     () =>
       ds
@@ -134,6 +139,7 @@ export default function SharedBacktest() {
                   byTradeNo={byTradeNo}
                   bySide={bySide}
                   rr={rr}
+                  targetLadder={targetLadder}
                   recovery={recovery}
                   stopPoints={ds.stopBricks * ds.brickPoints}
                 />

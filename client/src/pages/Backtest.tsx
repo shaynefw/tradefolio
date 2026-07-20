@@ -13,6 +13,7 @@ import {
   Loader2,
   Plus,
   Settings,
+  Target,
   TrendingDown,
   TrendingUp,
   Upload,
@@ -75,6 +76,7 @@ import {
   computeRecoveryStats,
   computeRrBuckets,
   computeScaling,
+  computeTargetLadder,
 } from "../backtest/calculations";
 import type {
   BacktestDataset,
@@ -212,6 +214,10 @@ export default function Backtest() {
   const byTradeNo = useMemo(() => (ds ? computeByTradeNo(ds) : []), [ds]);
   const bySide = useMemo(() => (ds ? computeBySide(ds) : []), [ds]);
   const rr = useMemo(() => (ds ? computeRrBuckets(ds) : []), [ds]);
+  const targetLadder = useMemo(
+    () => (ds ? computeTargetLadder(ds) : []),
+    [ds],
+  );
   const recovery = useMemo(
     () =>
       ds
@@ -585,6 +591,7 @@ export default function Backtest() {
                 byTradeNo={byTradeNo}
                 bySide={bySide}
                 rr={rr}
+                targetLadder={targetLadder}
                 recovery={recovery}
                 stopPoints={ds.stopBricks * ds.brickPoints}
               />
@@ -1664,6 +1671,7 @@ export function TimingTab({
   byTradeNo,
   bySide,
   rr,
+  targetLadder,
   recovery,
   stopPoints,
 }: {
@@ -1671,6 +1679,7 @@ export function TimingTab({
   byTradeNo: ReturnType<typeof computeByTradeNo>;
   bySide: ReturnType<typeof computeBySide>;
   rr: ReturnType<typeof computeRrBuckets>;
+  targetLadder: ReturnType<typeof computeTargetLadder>;
   recovery: ReturnType<typeof computeRecoveryStats>;
   stopPoints: number;
 }) {
@@ -1808,6 +1817,76 @@ export function TimingTab({
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Target ladder — full width so all columns are visible */}
+      <section className="space-y-3">
+        <SectionHeader
+          icon={Target}
+          title="Target ladder — what if my TP were…"
+          hint={`Holds each trade to the target instead of the ${stopPoints}pt stop: a win if MFE reached the target, else a full stop. Hit% is the win rate you'd get; Need% is what you'd need to break even at that TP. EV is points per trade.`}
+        />
+        <Card className="bg-card/60">
+          <CardContent className="pt-5 pb-5">
+            <div className="overflow-x-auto rounded-md border border-border">
+              <table className="w-full min-w-[34rem] text-sm">
+                <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 text-left">TP (pts)</th>
+                    <th className="px-3 py-2 text-right">Hit%</th>
+                    <th className="px-3 py-2 text-right">Need%</th>
+                    <th className="px-3 py-2 text-right">EV (pts)</th>
+                    <th className="px-3 py-2 text-right">Hits</th>
+                    <th className="px-3 py-2 text-right">Amb.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {targetLadder.map((r) => (
+                    <tr key={r.tpPoints} className="border-t border-border/40">
+                      <td className="px-3 py-2 font-medium tabular-nums">
+                        {r.tpPoints}
+                        <span className="text-muted-foreground ml-1.5 text-xs">
+                          1:{(r.tpPoints / r.stopPoints).toFixed(2).replace(/\.?0+$/, "")}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums font-semibold text-green-400">
+                        {fmtPct(r.hitRate)}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                        {fmtPct(r.breakevenWinRate)}
+                      </td>
+                      <td
+                        className={cn(
+                          "px-3 py-2 text-right tabular-nums font-semibold",
+                          r.positive ? "text-green-400" : "text-red-400",
+                        )}
+                      >
+                        {r.evPoints >= 0 ? "+" : ""}
+                        {r.evPoints.toFixed(1)}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {r.hits}
+                      </td>
+                      <td
+                        className="px-3 py-2 text-right tabular-nums text-muted-foreground"
+                        title="Reached the target but also hit the stop — path order unknown, counted as a non-win"
+                      >
+                        {r.ambiguous || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              A green EV means holding to that target beat the stop over this
+              sample. <span className="font-medium text-foreground/80">Amb.</span>{" "}
+              = trades that reached the target but also hit the stop, so the order
+              can't be proven from MFE/MAE alone — counted conservatively as
+              non-wins. Only forward-testing the actual TP resolves those.
+            </p>
           </CardContent>
         </Card>
       </section>

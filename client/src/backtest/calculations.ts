@@ -346,6 +346,97 @@ export function computeRrBuckets(ds: BacktestDataset): RrBucket[] {
 }
 
 // ---------------------------------------------------------------------------
+// Target ladder ("what if my TP were X?").
+//
+// For a fixed stop, sweep a set of take-profit levels and, for each, model a
+// "hold to target" rule from the recorded excursions: a trade is a win if its
+// favorable excursion (MFE) reached the target before the stop could fire, and
+// a loss otherwise. This is the corrected version of the reach table — it turns
+// each candidate TP into a hit rate, the win rate you'd *need* to break even at
+// that TP:stop ratio, and the expected value per trade in points.
+//
+// Encoding note (matches the source spreadsheet): a blank/"—" MFE means the
+// favorable excursion never reached one brick, i.e. MFE < brickPoints — NOT
+// missing data. We treat it as 0, so such trades never clear a target.
+//
+// Path caveat: MFE alone can't prove the target was reached *before* the stop.
+// When a trade's adverse excursion (MAE) also reached the stop, the order is
+// unknowable from this data, so we flag it as `ambiguous` and (conservatively)
+// do NOT count it as a win. Forward-testing the actual TP resolves these.
+// ---------------------------------------------------------------------------
+
+export interface TargetRung {
+  tpPoints: number;
+  stopPoints: number;
+  hits: number;        // trades whose MFE reached tpPoints (clean, non-ambiguous)
+  ambiguous: number;   // reached tpPoints but MAE also reached stop — order unknown
+  losses: number;      // never reached tpPoints
+  total: number;
+  hitRate: number;     // hits / total
+  breakevenWinRate: number; // stop / (stop + tp) — WR needed for EV = 0
+  evPoints: number;    // expected value per trade, in points, at this TP
+  positive: boolean;   // evPoints > 0
+}
+
+// Default TP levels for the ladder: multiples of one brick, capped near the
+// stop. At brick=20 this yields 20 / 40 / 60 / 100 / 160 — the levels the user
+// asked to sweep. Always includes the strategy's own TP if it's set.
+function defaultTargetLevels(ds: BacktestDataset): number[] {
+  const brick = ds.brickPoints > 0 ? ds.brickPoints : 20;
+  const stop = ds.stopBricks * ds.brickPoints;
+  const base = [1, 2, 3, 5, 8].map((m) => m * brick).filter((p) => p <= stop);
+  const own = (ds.takeProfitBricks ?? 0) * ds.brickPoints;
+  const set = new Set(base);
+  if (own > 0) set.add(own);
+  return Array.from(set).sort((a, b) => a - b);
+}
+
+export function computeTargetLadder(
+  ds: BacktestDataset,
+  levels?: number[],
+): TargetRung[] {
+  const valid = ds.trades.filter((t) => t.validEntry);
+  const total = valid.length;
+  const stopPoints = ds.stopBricks * ds.brickPoints;
+  const tps = levels && levels.length > 0 ? levels : defaultTargetLevels(ds);
+
+  return tps.map((tp) => {
+    let hits = 0;
+    let ambiguous = 0;
+    let losses = 0;
+    for (const t of valid) {
+      const mfe = t.mfe ?? 0; // "—" ⇒ < 1 brick ⇒ treat as 0
+      if (mfe >= tp) {
+        // Reached the target. If MAE also reached the stop, path order is
+        // unknown → ambiguous; otherwise a clean hit.
+        const mae = t.mae ?? (t.outcome === "Took Loss" ? stopPoints : 0);
+        if (stopPoints > 0 && mae >= stopPoints) ambiguous += 1;
+        else hits += 1;
+      } else {
+        losses += 1;
+      }
+    }
+    const decided = total; // ambiguous trades stay in the denominator as non-wins
+    const hitRate = decided > 0 ? hits / decided : 0;
+    const breakevenWinRate =
+      stopPoints + tp > 0 ? stopPoints / (stopPoints + tp) : 0;
+    const evPoints = hitRate * tp - (1 - hitRate) * stopPoints;
+    return {
+      tpPoints: tp,
+      stopPoints,
+      hits,
+      ambiguous,
+      losses,
+      total,
+      hitRate,
+      breakevenWinRate,
+      evPoints,
+      positive: evPoints > 0,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Recovery metrics. The source spreadsheet annotates each re-entry trade with
 // either "recovery" (first attempt after a paper loss) or "recovery 2" (second
 // attempt after the first recovery itself failed). The dashboard's headline
