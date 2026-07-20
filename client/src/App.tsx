@@ -20,6 +20,7 @@ const Accounts = React.lazy(() => import("./pages/Accounts"));
 const Tags = React.lazy(() => import("./pages/Tags"));
 const Strategies = React.lazy(() => import("./pages/Strategies"));
 const Backtest = React.lazy(() => import("./pages/Backtest"));
+const SizeCalculator = React.lazy(() => import("./pages/SizeCalculator"));
 const SettingsPage = React.lazy(() => import("./pages/Settings"));
 const SharedBacktest = React.lazy(() => import("./pages/SharedBacktest"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
@@ -130,6 +131,14 @@ function AppRoutes() {
           {() => (
             <Protected>
               <Backtest />
+            </Protected>
+          )}
+        </Route>
+
+        <Route path="/size">
+          {() => (
+            <Protected>
+              <SizeCalculator />
             </Protected>
           )}
         </Route>
