@@ -36,7 +36,9 @@ interface State {
   sym: string;
   customPerPoint: string;
   balance: string;
+  riskMode: "pct" | "dollar";
   riskPct: string;
+  riskDollar: string;
   stopPoints: string;
   tpPoints: string;
   propMode: boolean;
@@ -47,7 +49,9 @@ const DEFAULTS: State = {
   sym: "MNQ",
   customPerPoint: "2",
   balance: "50000",
+  riskMode: "pct",
   riskPct: "2",
+  riskDollar: "1000",
   stopPoints: "160",
   tpPoints: "",
   propMode: false,
@@ -85,13 +89,16 @@ export default function SizeCalculator() {
   const calc = useMemo(() => {
     const balance = Number(s.balance) || 0;
     const riskPct = Number(s.riskPct) || 0;
+    const riskDollar = Number(s.riskDollar) || 0;
     const stop = Number(s.stopPoints) || 0;
     const tp = Number(s.tpPoints) || 0;
     const buffer = Number(s.buffer) || 0;
+    const dollarMode = s.riskMode === "dollar";
 
     // Risk base: full balance, or (prop mode) the drawdown buffer.
     const base = s.propMode ? buffer : balance;
-    const budget = (riskPct / 100) * base; // $ we're willing to lose
+    // $ we're willing to lose: a fixed dollar amount, or a % of the base.
+    const budget = dollarMode ? riskDollar : (riskPct / 100) * base;
     const riskPerContract = stop * perPoint; // $ lost if stopped, per contract
     const rawContracts = riskPerContract > 0 ? budget / riskPerContract : 0;
     const contracts = Math.max(0, Math.floor(rawContracts));
@@ -113,7 +120,12 @@ export default function SizeCalculator() {
     // are stepped realistically — you trade the larger size as you climb, so
     // higher tiers arrive faster per dollar. A "net win" = one win beyond a
     // loss (wins − losses); it needs a target to know the per-win dollars.
-    const unit = riskPct > 0 && riskPerContract > 0 ? riskPerContract / (riskPct / 100) : 0;
+    // Only meaningful in % mode — a fixed dollar risk doesn't grow with the
+    // account, so more balance never earns another contract.
+    const unit =
+      !dollarMode && riskPct > 0 && riskPerContract > 0
+        ? riskPerContract / (riskPct / 100)
+        : 0;
     const tiers: {
       size: number;
       threshold: number;
@@ -161,6 +173,7 @@ export default function SizeCalculator() {
       tp,
       unit,
       tiers,
+      dollarMode,
     };
   }, [s, perPoint]);
 
@@ -232,17 +245,49 @@ export default function SizeCalculator() {
                     className={inputClass}
                   />
                 </label>
-                <label className="flex flex-col gap-1 text-sm">
-                  <span className="text-xs uppercase tracking-wider text-muted-foreground">
-                    Risk per trade (%)
-                  </span>
-                  <input
-                    inputMode="decimal"
-                    value={s.riskPct}
-                    onChange={(e) => set({ riskPct: e.target.value })}
-                    className={inputClass}
-                  />
-                </label>
+                <div className="flex flex-col gap-1 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                      Risk per trade
+                    </span>
+                    <div className="inline-flex overflow-hidden rounded-md border border-border">
+                      {(["pct", "dollar"] as const).map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => set({ riskMode: m })}
+                          className={cn(
+                            "px-2 py-0.5 text-xs font-medium transition-colors",
+                            s.riskMode === m
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {m === "pct" ? "%" : "$"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {s.riskMode === "pct" ? (
+                    <input
+                      key="pct"
+                      inputMode="decimal"
+                      value={s.riskPct}
+                      onChange={(e) => set({ riskPct: e.target.value })}
+                      className={inputClass}
+                      placeholder="2"
+                    />
+                  ) : (
+                    <input
+                      key="dollar"
+                      inputMode="decimal"
+                      value={s.riskDollar}
+                      onChange={(e) => set({ riskDollar: e.target.value })}
+                      className={inputClass}
+                      placeholder="1000"
+                    />
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -326,17 +371,21 @@ export default function SizeCalculator() {
                 <div className="flex gap-2 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>
-                    Even 1 contract risks {money(calc.oneRisk)} ={" "}
-                    {calc.onePctOfBase.toFixed(1)}% of your{" "}
-                    {s.propMode ? "buffer" : "balance"} — above your{" "}
-                    {s.riskPct}% cap. Trade a tighter stop, a bigger account, or
-                    accept the higher % as a deliberate choice.
+                    Even 1 contract risks {money(calc.oneRisk)}
+                    {calc.dollarMode
+                      ? ` — above your ${money(calc.budget)} budget`
+                      : ` = ${calc.onePctOfBase.toFixed(1)}% of your ${s.propMode ? "buffer" : "balance"}, above your ${s.riskPct}% cap`}
+                    . Trade a tighter stop, a bigger account, or raise the limit
+                    as a deliberate choice.
                   </span>
                 </div>
               )}
 
               <dl className="space-y-2 text-sm border-t border-border/40 pt-4">
-                <Row label="Risk budget" hint={`${s.riskPct}% of ${s.propMode ? "buffer" : "balance"}`}>
+                <Row
+                  label="Risk budget"
+                  hint={calc.dollarMode ? "fixed $" : `${s.riskPct}% of ${s.propMode ? "buffer" : "balance"}`}
+                >
                   {money(calc.budget)}
                 </Row>
                 <Row label="Risk per contract" hint={`${s.stopPoints || 0}pt × $${perPoint}/pt`}>
@@ -380,6 +429,18 @@ export default function SizeCalculator() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Scale-up note in fixed-dollar mode (no tiers — risk doesn't scale) */}
+        {calc.dollarMode && (
+          <p className="flex gap-2 text-xs text-muted-foreground max-w-2xl">
+            <TrendingUp className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            <span>
+              Scale-up preview shows in <span className="font-medium text-foreground/80">%</span> mode.
+              A fixed-dollar risk doesn't grow with the account, so your size
+              stays flat regardless of balance.
+            </span>
+          </p>
+        )}
 
         {/* Scale-up preview */}
         {calc.unit > 0 && calc.tiers.length > 0 && (
