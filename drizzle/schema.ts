@@ -140,6 +140,13 @@ export const backtestDatasets = sqliteTable("backtest_datasets", {
   speedScalingSchedule: text("speed_scaling_schedule"),
   // Unguessable random token for public read-only sharing. null = private.
   shareToken: text("share_token"),
+  // Lifecycle status of the whole dataset, surfaced (color-coded) in the
+  // dataset switcher. Defaults to "active".
+  status: text("status", {
+    enum: ["active", "paused", "discontinued"],
+  })
+    .default("active")
+    .notNull(),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .default(sql`(unixepoch() * 1000)`)
     .notNull(),

@@ -16,6 +16,7 @@ import { db, schema } from "../db.js";
 const sideEnum = z.enum(["LONG", "SHORT"]);
 const outcomeEnum = z.enum(["Took Profit", "Took Loss", "Breakeven"]);
 const recoveryEnum = z.enum(["none", "first", "second"]);
+const statusEnum = z.enum(["active", "paused", "discontinued"]);
 
 // Trade input shared by create + bulkInsert + update (with partials below).
 const tradeInputShape = {
@@ -233,6 +234,7 @@ const datasetRouter = router({
         premiumScalingSchedule: schema.backtestDatasets.premiumScalingSchedule,
         speedScalingSchedule: schema.backtestDatasets.speedScalingSchedule,
         shareToken: schema.backtestDatasets.shareToken,
+        status: schema.backtestDatasets.status,
         createdAt: schema.backtestDatasets.createdAt,
         updatedAt: schema.backtestDatasets.updatedAt,
         // Subquery counted via raw SQL — drizzle's sql template wasn't
@@ -258,6 +260,7 @@ const datasetRouter = router({
         rrBuckets: z.string().nullable().optional(),
         premiumScalingSchedule: z.string().nullable().optional(),
         speedScalingSchedule: z.string().nullable().optional(),
+        status: statusEnum.optional(),
         // Optional seed trades — used by "Load MNQ sample" flow. The whole
         // create-and-seed runs in one transaction so partial failures don't
         // leave an empty dataset around.
@@ -281,6 +284,7 @@ const datasetRouter = router({
             rrBuckets: input.rrBuckets ?? null,
             premiumScalingSchedule: input.premiumScalingSchedule ?? null,
             speedScalingSchedule: input.speedScalingSchedule ?? null,
+            status: input.status ?? "active",
           })
           .returning();
         if (input.seedTrades && input.seedTrades.length > 0) {
@@ -309,6 +313,7 @@ const datasetRouter = router({
         rrBuckets: z.string().nullable().optional(),
         premiumScalingSchedule: z.string().nullable().optional(),
         speedScalingSchedule: z.string().nullable().optional(),
+        status: statusEnum.optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {

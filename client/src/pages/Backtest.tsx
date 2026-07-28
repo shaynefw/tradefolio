@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -14,6 +14,7 @@ import {
   Plus,
   Settings,
   Target,
+  ChevronDown,
   TrendingDown,
   TrendingUp,
   Upload,
@@ -155,6 +156,35 @@ function opacityForCount(n: number): number {
 // ---------------------------------------------------------------------------
 
 const SELECTED_DATASET_KEY = "backtest.selectedDatasetId";
+
+// Lifecycle status of a dataset, color-coded in the switcher.
+export type DatasetStatus = "active" | "paused" | "discontinued";
+
+export const DATASET_STATUS_META: Record<
+  DatasetStatus,
+  { label: string; dot: string; text: string; badge: string }
+> = {
+  active: {
+    label: "Active",
+    dot: "#22c55e",
+    text: "text-green-400",
+    badge: "bg-green-500/15 text-green-300",
+  },
+  paused: {
+    label: "Paused",
+    dot: "#eab308",
+    text: "text-yellow-400",
+    badge: "bg-yellow-500/15 text-yellow-300",
+  },
+  discontinued: {
+    label: "Discontinued",
+    dot: "#ef4444",
+    text: "text-red-400",
+    badge: "bg-red-500/15 text-red-300",
+  },
+};
+
+const DATASET_STATUS_ORDER: DatasetStatus[] = ["active", "paused", "discontinued"];
 
 export default function Backtest() {
   const utils = trpc.useUtils();
@@ -350,6 +380,16 @@ export default function Backtest() {
     onError: (err) => toast.error(err.message ?? "Failed to rename"),
   });
 
+  // Quick status set from the header pill — optimistic-ish via list refetch.
+  const setStatusMutation = trpc.backtest.dataset.update.useMutation({
+    onSuccess: (_data, vars) => {
+      utils.backtest.dataset.list.invalidate();
+      const meta = DATASET_STATUS_META[(vars.status ?? "active") as DatasetStatus];
+      toast.success(`Marked ${meta.label.toLowerCase()}`);
+    },
+    onError: (err) => toast.error(err.message ?? "Failed to update status"),
+  });
+
   const deleteDatasetMutation = trpc.backtest.dataset.delete.useMutation({
     onSuccess: () => {
       // Drop the local selection so the page falls back to the first
@@ -406,6 +446,16 @@ export default function Backtest() {
                 datasets={datasets}
                 activeId={activeDatasetId}
                 onChange={setSelectedDatasetId}
+              />
+              <DatasetStatusControl
+                status={statusOf(
+                  (activeMeta as { status?: DatasetStatus | null } | null)?.status,
+                )}
+                disabled={!activeMeta || setStatusMutation.isPending}
+                onChange={(next) =>
+                  activeDatasetId != null &&
+                  setStatusMutation.mutate({ id: activeDatasetId, status: next })
+                }
               />
               <button
                 type="button"
@@ -674,7 +724,12 @@ function EmptyState({
 // ---------------------------------------------------------------------------
 
 interface DatasetSelectorProps {
-  datasets: Array<{ id: number; name: string; tradeCount: number }>;
+  datasets: Array<{
+    id: number;
+    name: string;
+    tradeCount: number;
+    status?: DatasetStatus | null;
+  }>;
   activeId: number | null;
   onChange: (id: number) => void;
 }
@@ -1427,23 +1482,166 @@ function ScheduleEditor({
   );
 }
 
-function DatasetSelector({ datasets, activeId, onChange }: DatasetSelectorProps) {
+function statusOf(s?: DatasetStatus | null): DatasetStatus {
+  return s === "paused" || s === "discontinued" ? s : "active";
+}
+
+// Small colored status dot. `dimmed` renders a hollow ring instead of a filled
+// dot — used for the "discontinued" look in dense lists if ever needed.
+function StatusDot({ status, className }: { status: DatasetStatus; className?: string }) {
   return (
-    <label className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-2 text-xs">
-      <Database className="h-3.5 w-3.5 text-muted-foreground" />
-      <span className="text-muted-foreground">Dataset</span>
-      <select
-        className="bg-transparent text-sm font-medium text-foreground focus:outline-none"
-        value={activeId ?? ""}
-        onChange={(e) => onChange(Number(e.target.value))}
+    <span
+      className={cn("h-2 w-2 shrink-0 rounded-full", className)}
+      style={{ backgroundColor: DATASET_STATUS_META[status].dot }}
+      title={DATASET_STATUS_META[status].label}
+    />
+  );
+}
+
+// Custom dropdown so each dataset row can carry a colored status dot (native
+// <option> coloring is unreliable across browsers). Mirrors the AccountSelector
+// pattern used elsewhere in the app.
+function DatasetSelector({ datasets, activeId, onChange }: DatasetSelectorProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, []);
+
+  const active = datasets.find((d) => d.id === activeId) ?? null;
+  const activeStatus = statusOf(active?.status);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-2 text-xs transition-colors hover:bg-accent"
       >
-        {datasets.map((d) => (
-          <option key={d.id} value={d.id} className="bg-zinc-900 text-foreground">
-            {d.name} ({d.tradeCount})
-          </option>
-        ))}
-      </select>
-    </label>
+        <Database className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="text-muted-foreground">Dataset</span>
+        {active && <StatusDot status={activeStatus} />}
+        <span
+          className={cn(
+            "text-sm font-medium",
+            activeStatus === "discontinued" && "line-through decoration-red-400/50",
+          )}
+        >
+          {active ? `${active.name} (${active.tradeCount})` : "Select…"}
+        </span>
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1 max-h-80 w-max min-w-[16rem] overflow-y-auto rounded-md border border-border bg-popover shadow-lg">
+          {datasets.map((d) => {
+            const st = statusOf(d.status);
+            const isActive = d.id === activeId;
+            return (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => {
+                  onChange(d.id);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-accent",
+                  isActive ? "bg-accent/60 font-medium" : "text-foreground",
+                )}
+              >
+                <StatusDot status={st} />
+                <span
+                  className={cn(
+                    "truncate",
+                    st === "discontinued" && "text-muted-foreground line-through decoration-red-400/50",
+                    st === "paused" && "text-foreground/80",
+                  )}
+                >
+                  {d.name}
+                </span>
+                <span className="ml-auto pl-3 text-xs text-muted-foreground">
+                  {d.tradeCount}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Header pill to change the active dataset's status. Compact dropdown of the
+// three lifecycle states, each with its color dot.
+function DatasetStatusControl({
+  status,
+  disabled,
+  onChange,
+}: {
+  status: DatasetStatus;
+  disabled?: boolean;
+  onChange: (s: DatasetStatus) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, []);
+
+  const meta = DATASET_STATUS_META[status];
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+        title="Dataset status"
+        className={cn(
+          "flex items-center gap-1.5 rounded-md border border-border bg-card/60 px-2.5 py-2 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-40",
+          meta.text,
+        )}
+      >
+        <StatusDot status={status} />
+        {meta.label}
+        <ChevronDown className={cn("h-3 w-3 text-muted-foreground transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1 w-40 overflow-hidden rounded-md border border-border bg-popover shadow-lg">
+          {DATASET_STATUS_ORDER.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => {
+                if (s !== status) onChange(s);
+                setOpen(false);
+              }}
+              className={cn(
+                "flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-accent",
+                s === status ? "bg-accent/60 font-medium" : "text-foreground",
+              )}
+            >
+              <StatusDot status={s} />
+              {DATASET_STATUS_META[s].label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

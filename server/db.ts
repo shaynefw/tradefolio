@@ -163,6 +163,11 @@ export async function initDb() {
     "TEXT",
   );
   await addColumnIfMissing("backtest_datasets", "share_token", "TEXT");
+  await addColumnIfMissing(
+    "backtest_datasets",
+    "status",
+    "TEXT NOT NULL DEFAULT 'active'",
+  );
   await migrateOutcomeAllowBreakeven();
 }
 
