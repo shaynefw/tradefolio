@@ -651,6 +651,8 @@ export default function Backtest() {
               <ScalingTab
                 premium={premium}
                 speed={speed}
+                premiumSchedule={ds.premiumScalingSchedule}
+                speedSchedule={ds.speedScalingSchedule}
                 onOpenSettings={() => setScalingSettingsOpen(true)}
               />
             </TabsContent>
@@ -2220,10 +2222,14 @@ export function TimingTab({
 export function ScalingTab({
   premium,
   speed,
+  premiumSchedule,
+  speedSchedule,
   onOpenSettings,
 }: {
   premium: ReturnType<typeof computeScaling>;
   speed: ReturnType<typeof computeScaling>;
+  premiumSchedule?: ScalingSchedule | null;
+  speedSchedule?: ScalingSchedule | null;
   onOpenSettings: () => void;
 }) {
   return (
@@ -2231,12 +2237,14 @@ export function ScalingTab({
       <ScalingChart
         name="Real $ Premium Scaling"
         series={premium}
+        schedule={premiumSchedule ?? null}
         colorA="#22c55e"
         onOpenSettings={onOpenSettings}
       />
       <ScalingChart
         name="Real $ Speed Scaling"
         series={speed}
+        schedule={speedSchedule ?? null}
         colorA="#38bdf8"
         onOpenSettings={onOpenSettings}
       />
@@ -2244,18 +2252,48 @@ export function ScalingTab({
   );
 }
 
+// Given the running balance and a schedule, work out the level actually
+// reached (null when still below the first rung), the next one up, and how
+// much more money is needed to reach it.
+function nextLevelInfo(balance: number, schedule: ScalingSchedule | null) {
+  if (!schedule || schedule.length === 0) return null;
+  const sorted = [...schedule].sort(
+    (a, b) => a.recommendedBalance - b.recommendedBalance,
+  );
+  // Highest rung whose threshold the balance has actually cleared — no
+  // fallback to the first level, so "below the ladder" reads as reached=null.
+  let reached: ScalingLevel | null = null;
+  for (const l of sorted) {
+    if (balance >= l.recommendedBalance) reached = l;
+    else break;
+  }
+  const next = sorted.find((l) => l.recommendedBalance > balance) ?? null;
+  if (!next) {
+    return { reached, next: null, needed: 0, progress: 1 };
+  }
+  // Progress toward `next` measured from the reached level's threshold (or 0
+  // when still below the first rung).
+  const floor = reached ? reached.recommendedBalance : 0;
+  const span = next.recommendedBalance - floor;
+  const progress = span > 0 ? Math.min(1, Math.max(0, (balance - floor) / span)) : 0;
+  return { reached, next, needed: next.recommendedBalance - balance, progress };
+}
+
 function ScalingChart({
   name,
   series,
+  schedule,
   colorA,
   onOpenSettings,
 }: {
   name: string;
   series: ReturnType<typeof computeScaling>;
+  schedule: ScalingSchedule | null;
   colorA: string;
   onOpenSettings: () => void;
 }) {
   const gradientId = `grad-${name.replace(/\W+/g, "")}`;
+  const levelUp = series.tracked ? nextLevelInfo(series.end, schedule) : null;
 
   // Not tracked yet → prompt the user to set a starting balance instead of
   // rendering an empty chart.
@@ -2307,6 +2345,55 @@ function ScalingChart({
                   Open the trade and use "Reset balance after this trade" to declare a new starting point.
                 </p>
               </div>
+            </div>
+          )}
+          {/* Next level-up progress */}
+          {levelUp && (
+            <div className="mb-4 rounded-md border border-border/60 bg-background/40 p-3">
+              {levelUp.next ? (
+                <>
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                    <p className="text-sm">
+                      <span className="text-muted-foreground">Next level-up:</span>{" "}
+                      <span className="font-semibold text-foreground">
+                        {levelUp.next.name}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {" "}at {formatCurrency(levelUp.next.recommendedBalance)}
+                      </span>
+                    </p>
+                    <p className="text-sm">
+                      <span className="font-semibold" style={{ color: colorA }}>
+                        {formatCurrency(levelUp.needed)}
+                      </span>{" "}
+                      <span className="text-muted-foreground">to go</span>
+                    </p>
+                  </div>
+                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${(levelUp.progress * 100).toFixed(1)}%`,
+                        backgroundColor: colorA,
+                      }}
+                    />
+                  </div>
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    {levelUp.reached
+                      ? `Currently at ${levelUp.reached.name} · profit/trade ${formatCurrency(levelUp.next.profitPerTrade)} after level-up`
+                      : `Below the first rung · reach ${levelUp.next.name} to start the ladder`}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm">
+                  <span className="font-semibold text-foreground">Top level reached</span>
+                  {levelUp.reached && (
+                    <span className="text-muted-foreground">
+                      {" "}— running at {levelUp.reached.name} (highest rung on the ladder)
+                    </span>
+                  )}
+                </p>
+              )}
             </div>
           )}
           <ResponsiveContainer width="100%" height={300}>

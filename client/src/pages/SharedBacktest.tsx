@@ -145,7 +145,13 @@ export default function SharedBacktest() {
                 />
               </TabsContent>
               <TabsContent value="scaling" className="space-y-6 mt-6">
-                <ScalingTab premium={premium} speed={speed} onOpenSettings={() => {}} />
+                <ScalingTab
+                  premium={premium}
+                  speed={speed}
+                  premiumSchedule={ds.premiumScalingSchedule}
+                  speedSchedule={ds.speedScalingSchedule}
+                  onOpenSettings={() => {}}
+                />
               </TabsContent>
               <TabsContent value="calendar" className="space-y-6 mt-6">
                 <BacktestCalendar dataset={ds} />
