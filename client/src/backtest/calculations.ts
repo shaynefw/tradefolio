@@ -35,6 +35,14 @@ export interface CoreSummary {
   tpPoints: number;
   slPoints: number;
   rewardRisk: number; // TP ÷ stop, e.g. 1.25 for 200/160
+  // Kelly criterion — the bankroll fraction that maximizes long-run growth for
+  // this win rate and payoff:
+  //   f* = p − q/b     (p = win rate, q = 1−p, b = reward:risk)
+  // Expressed as a fraction of account equity risked per trade. ≤ 0 means the
+  // edge doesn't cover the payoff odds (bet nothing). Full Kelly is famously
+  // aggressive — halfKelly is the practical figure most traders size from.
+  kelly: number;
+  halfKelly: number;
   // Average net wins per calendar month spanned (wins − losses ÷ months).
   // Matches the source spreadsheet's "Avg Net Wins/m".
   avgNetWinsPerMonth: number;
@@ -95,6 +103,15 @@ export function computeCoreSummary(ds: BacktestDataset): CoreSummary {
   const netWins = wins.length - losses.length;
   const avgNetWinsPerMonth = monthsSpanned > 0 ? netWins / monthsSpanned : 0;
 
+  // Kelly: f* = p − q/b, using the same decisive-only win rate as the WR card
+  // (breakevens excluded from both numerator and denominator). Clamped at 0 —
+  // a negative Kelly means "no edge at these odds", not "bet the other way",
+  // since the entry signal isn't reversible.
+  const p = decisive > 0 ? wins.length / decisive : 0;
+  const rawKelly =
+    decisive > 0 && rewardRisk > 0 ? p - (1 - p) / rewardRisk : 0;
+  const kelly = Math.max(0, rawKelly);
+
   return {
     totalRows: ds.trades.length,
     validTrades: validTrades.length,
@@ -117,6 +134,8 @@ export function computeCoreSummary(ds: BacktestDataset): CoreSummary {
     tpPoints,
     slPoints,
     rewardRisk,
+    kelly,
+    halfKelly: kelly / 2,
     avgNetWinsPerMonth,
     monthsSpanned,
   };

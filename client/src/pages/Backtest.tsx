@@ -1690,6 +1690,19 @@ export function OverviewTab({
           sub={`TP ${core.tpPoints} / SL ${core.slPoints} pts`}
         />
         <StatCard
+          label="Kelly"
+          value={
+            <span className={core.kelly > 0 ? "text-green-400" : "text-red-400"}>
+              {fmtPct(core.kelly)}
+            </span>
+          }
+          sub={
+            core.kelly > 0
+              ? `Half-Kelly ${fmtPct(core.halfKelly)} · of equity per trade`
+              : "No edge at this reward:risk"
+          }
+        />
+        <StatCard
           label="Long / Short WR"
           value={
             <span className="text-foreground text-base font-semibold">
