@@ -14,6 +14,9 @@ import { cn } from "../lib/utils";
 const STORAGE_KEY = "tf.pctCalc.v1";
 
 interface State {
+  // gain / loss between two values
+  gainFrom: string;
+  gainTo: string;
   // price move
   entry: string;
   exit: string;
@@ -36,6 +39,8 @@ interface State {
 }
 
 const DEFAULTS: State = {
+  gainFrom: "1000",
+  gainTo: "1300",
   entry: "20000",
   exit: "20100",
   contracts: "3",
@@ -167,6 +172,21 @@ export default function PercentCalculator() {
   }, [s]);
   const set = (p: Partial<State>) => setS((v) => ({ ...v, ...p }));
 
+  // ---- 0. gain / loss between two values -----------------------------------
+  // Percent change uses |from| as the denominator so a negative starting value
+  // doesn't flip the sign of the result.
+  const gFrom = num(s.gainFrom);
+  const gTo = num(s.gainTo);
+  const gDelta = gTo - gFrom;
+  const gDefined = gFrom !== 0;
+  const gPct = gDefined ? (gDelta / Math.abs(gFrom)) * 100 : 0;
+  const gDir: "gain" | "loss" | "flat" =
+    gDelta > 0 ? "gain" : gDelta < 0 ? "loss" : "flat";
+  const gTone = gDir === "gain" ? "good" : gDir === "loss" ? "bad" : "plain";
+  // The banner shows the percentage, so it stays neutral when that's undefined
+  // even though the dollar change still has a direction.
+  const gBanner = gDefined ? gDir : "flat";
+
   // ---- 1. price move -------------------------------------------------------
   const entry = num(s.entry);
   const exit = num(s.exit);
@@ -203,6 +223,70 @@ export default function PercentCalculator() {
       </p>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* 0 — gain / loss */}
+        <Panel
+          title="Percentage gain / loss"
+          blurb="Change between any two values — account balances, P&L, position value."
+        >
+          <div className="grid grid-cols-2 gap-4">
+            <Field
+              label="Starting value"
+              value={s.gainFrom}
+              onChange={(v) => set({ gainFrom: v })}
+            />
+            <Field
+              label="Ending value"
+              value={s.gainTo}
+              onChange={(v) => set({ gainTo: v })}
+            />
+          </div>
+
+          <div
+            className={cn(
+              "rounded-md border p-4 text-center",
+              gBanner === "gain" && "border-green-500/30 bg-green-500/10",
+              gBanner === "loss" && "border-red-500/30 bg-red-500/10",
+              gBanner === "flat" && "border-border/60 bg-background/40",
+            )}
+          >
+            <p
+              className={cn(
+                "text-xs font-semibold uppercase tracking-wider",
+                gBanner === "gain" && "text-green-400",
+                gBanner === "loss" && "text-red-400",
+                gBanner === "flat" && "text-muted-foreground",
+              )}
+            >
+              {!gDefined ? "—" : gDir === "gain" ? "Gain" : gDir === "loss" ? "Loss" : "No change"}
+            </p>
+            <p
+              className={cn(
+                "mt-1 text-4xl font-bold tabular-nums",
+                gBanner === "gain" && "text-green-400",
+                gBanner === "loss" && "text-red-400",
+                gBanner === "flat" && "text-foreground",
+              )}
+            >
+              {gDefined ? `${gPct >= 0 ? "+" : "−"}${Math.abs(gPct).toFixed(2)}%` : "—"}
+            </p>
+          </div>
+
+          <div className="space-y-2 border-t border-border/40 pt-3">
+            <Out label="Absolute change" tone={gTone}>
+              {gDelta >= 0 ? "+" : "−"}
+              {money(Math.abs(gDelta), 2)}
+            </Out>
+            <Out label="Multiple of starting value" tone="plain">
+              {gDefined ? `${(gTo / gFrom).toFixed(3)}×` : "—"}
+            </Out>
+            {!gDefined && (
+              <p className="text-xs text-muted-foreground">
+                Percent change is undefined when the starting value is zero.
+              </p>
+            )}
+          </div>
+        </Panel>
+
         {/* 1 — price move */}
         <Panel
           title="Price move → % / points / $"
