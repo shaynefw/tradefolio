@@ -35,6 +35,7 @@ import {
   type PeriodView,
 } from "../investor/calculations";
 import { MonthTable } from "../investor/MonthTable";
+import { YearCalendar } from "../investor/YearCalendar";
 
 const SELECTED_FUND_KEY = "investors.selectedFundId";
 const inputClass =
@@ -677,6 +678,8 @@ export function YearlyStats({
           value={`${summary.greenMonths} green / ${summary.redMonths} red`}
         />
       </div>
+
+      <YearCalendar periods={periods} year={year} />
 
       {series.length > 0 && (
         <Card className="bg-card/60">
