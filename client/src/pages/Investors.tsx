@@ -481,7 +481,7 @@ function AddMonthBar({
         Add month
       </Button>
       <span className="pb-2 text-xs text-muted-foreground">
-        Contributions carry forward from the previous month.
+        Opening capital = last month's contribution + that investor's net P&L.
       </span>
     </div>
   );
@@ -576,8 +576,9 @@ function MonthCard({
 
         <MonthTable period={period} editable onEditContribution={onEditContribution} />
         <p className="text-xs text-muted-foreground">
-          Click any contribution to change it. Everything else is derived
-          pro-rata.
+          Click any contribution to change it — use that to record a deposit or
+          withdrawal. Everything else is derived pro-rata, and next month opens
+          with this month's net P&L rolled into each balance.
         </p>
       </CardContent>
     </Card>

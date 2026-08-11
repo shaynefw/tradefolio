@@ -264,7 +264,21 @@ export const investorRouter = router({
               .select()
               .from(schema.investorEntries)
               .where(eq(schema.investorEntries.periodId, latest.id));
-            carried = new Map(rows.map((r) => [r.investorId, r.contribution]));
+            // Profits compound: the new month opens with last month's capital
+            // PLUS that investor's net P&L, so gains roll into their balance
+            // (and losses shrink it). Mirrors the client's period math:
+            //   net = (contribution / totalCapital) × (totalProfit − totalFees)
+            const totalCapital = rows.reduce((s, r) => s + r.contribution, 0);
+            const distributable = latest.totalProfit - latest.totalFees;
+            carried = new Map(
+              rows.map((r) => {
+                const weight =
+                  totalCapital > 0 ? r.contribution / totalCapital : 0;
+                const next = r.contribution + weight * distributable;
+                // Round to cents so float drift can't accumulate across months.
+                return [r.investorId, Math.round(next * 100) / 100];
+              }),
+            );
           }
         }
         await db.insert(schema.investorEntries).values(
