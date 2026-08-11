@@ -21,6 +21,8 @@ const Tags = React.lazy(() => import("./pages/Tags"));
 const Strategies = React.lazy(() => import("./pages/Strategies"));
 const Backtest = React.lazy(() => import("./pages/Backtest"));
 const Calculators = React.lazy(() => import("./pages/Calculators"));
+const Investors = React.lazy(() => import("./pages/Investors"));
+const SharedInvestors = React.lazy(() => import("./pages/SharedInvestors"));
 const SettingsPage = React.lazy(() => import("./pages/Settings"));
 const SharedBacktest = React.lazy(() => import("./pages/SharedBacktest"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
@@ -54,6 +56,7 @@ function AppRoutes() {
         <Route path="/login" component={LoginPage} />
         <Route path="/register" component={RegisterPage} />
         <Route path="/shared/backtest/:token" component={SharedBacktest} />
+        <Route path="/shared/investors/:token" component={SharedInvestors} />
 
         <Route path="/">
           {() => (
@@ -131,6 +134,14 @@ function AppRoutes() {
           {() => (
             <Protected>
               <Backtest />
+            </Protected>
+          )}
+        </Route>
+
+        <Route path="/investors">
+          {() => (
+            <Protected>
+              <Investors />
             </Protected>
           )}
         </Route>

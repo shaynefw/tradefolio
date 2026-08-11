@@ -199,3 +199,77 @@ export const backtestTrades = sqliteTable("backtest_trades", {
     .default(sql`(unixepoch() * 1000)`)
     .notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// Investor ledger — track outside capital in a trading account and show each
+// investor their pro-rata share of each month's result.
+//
+// The model is deliberately simple, matching how the source spreadsheet works:
+// per month you record ONE net profit figure and ONE fee figure for the whole
+// fund, plus each investor's contribution for that month. Everything else is
+// derived pro-rata from contribution share.
+// ---------------------------------------------------------------------------
+
+export const investorFunds = sqliteTable("investor_funds", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  // Free-form blurb shown to clients on the shared page (strategy, terms…).
+  notes: text("notes"),
+  // Unguessable token for the public read-only client view. null = private.
+  shareToken: text("share_token"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .default(sql`(unixepoch() * 1000)`)
+    .notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .default(sql`(unixepoch() * 1000)`)
+    .notNull(),
+});
+
+export const investors = sqliteTable("investors", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  fundId: integer("fund_id")
+    .notNull()
+    .references(() => investorFunds.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  // Soft-hide an investor who has fully withdrawn without deleting history.
+  active: integer("active", { mode: "boolean" }).default(true).notNull(),
+  sortIdx: integer("sort_idx").default(0).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .default(sql`(unixepoch() * 1000)`)
+    .notNull(),
+});
+
+// One row per fund per month. totalProfit is the single number the owner edits.
+export const investorPeriods = sqliteTable("investor_periods", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  fundId: integer("fund_id")
+    .notNull()
+    .references(() => investorFunds.id, { onDelete: "cascade" }),
+  year: integer("year").notNull(),
+  month: integer("month").notNull(), // 1-12
+  totalProfit: real("total_profit").default(0).notNull(),
+  totalFees: real("total_fees").default(0).notNull(),
+  notes: text("notes"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .default(sql`(unixepoch() * 1000)`)
+    .notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .default(sql`(unixepoch() * 1000)`)
+    .notNull(),
+});
+
+// An investor's capital in a given month. Contributions can change month to
+// month as clients add or withdraw.
+export const investorEntries = sqliteTable("investor_entries", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  periodId: integer("period_id")
+    .notNull()
+    .references(() => investorPeriods.id, { onDelete: "cascade" }),
+  investorId: integer("investor_id")
+    .notNull()
+    .references(() => investors.id, { onDelete: "cascade" }),
+  contribution: real("contribution").default(0).notNull(),
+});

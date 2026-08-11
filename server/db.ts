@@ -124,6 +124,44 @@ export async function initDb() {
       updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
     )`,
     `CREATE INDEX IF NOT EXISTS idx_backtest_trades_dataset ON backtest_trades(dataset_id, sequence_idx)`,
+
+    // --- Investor ledger -------------------------------------------------
+    `CREATE TABLE IF NOT EXISTS investor_funds (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      notes TEXT,
+      share_token TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    )`,
+    `CREATE TABLE IF NOT EXISTS investors (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      fund_id INTEGER NOT NULL REFERENCES investor_funds(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      sort_idx INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    )`,
+    `CREATE TABLE IF NOT EXISTS investor_periods (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      fund_id INTEGER NOT NULL REFERENCES investor_funds(id) ON DELETE CASCADE,
+      year INTEGER NOT NULL,
+      month INTEGER NOT NULL,
+      total_profit REAL NOT NULL DEFAULT 0,
+      total_fees REAL NOT NULL DEFAULT 0,
+      notes TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_investor_periods_unique ON investor_periods(fund_id, year, month)`,
+    `CREATE TABLE IF NOT EXISTS investor_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      period_id INTEGER NOT NULL REFERENCES investor_periods(id) ON DELETE CASCADE,
+      investor_id INTEGER NOT NULL REFERENCES investors(id) ON DELETE CASCADE,
+      contribution REAL NOT NULL DEFAULT 0
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_investor_entries_unique ON investor_entries(period_id, investor_id)`,
   ];
 
   for (const sql of statements) {

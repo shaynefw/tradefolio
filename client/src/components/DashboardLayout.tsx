@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   FlaskConical,
+  Users,
   Calculator,
   Settings,
 } from "lucide-react";
@@ -50,6 +51,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Tags", icon: Tag, href: "/tags" },
   { label: "Strategies", icon: Target, href: "/strategies" },
   { label: "Backtesting", icon: FlaskConical, href: "/backtest" },
+  { label: "Investors", icon: Users, href: "/investors" },
   { label: "Calculators", icon: Calculator, href: "/calculators" },
   { label: "Settings", icon: Settings, href: "/settings" },
 ];
