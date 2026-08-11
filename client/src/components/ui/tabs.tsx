@@ -33,10 +33,12 @@ const TabsTrigger = React.forwardRef<
       "relative inline-flex select-none items-center justify-center whitespace-nowrap rounded-lg border px-3.5 py-1.5 text-sm font-semibold ring-offset-background transition-all duration-100 cursor-pointer",
       // Focus / disabled
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
-      // Inactive → raised dark key: top highlight + hard bottom edge
-      "border-white/10! bg-secondary text-muted-foreground",
+      // Inactive → raised dark key: top highlight + hard bottom edge. Aqua
+      // label reads as "clickable" without colliding with the app's semantic
+      // colours (green = profit, red = loss, blue = short, amber = paused).
+      "border-white/10! bg-secondary text-cyan-300",
       "shadow-[0_3px_0_0_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.07)]",
-      "hover:-translate-y-px hover:bg-accent hover:text-foreground",
+      "hover:-translate-y-px hover:bg-accent hover:text-cyan-100",
       "hover:shadow-[0_4px_0_0_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.12)]",
       // Press → sink into the tray
       "active:translate-y-[2px] active:shadow-[0_1px_0_0_rgba(0,0,0,0.55)]",
