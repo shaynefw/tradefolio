@@ -250,7 +250,7 @@ export default function Investors() {
             />
 
             <Tabs value={tab} onValueChange={setTab}>
-              <TabsList className="bg-card/60 max-w-full justify-start overflow-x-auto">
+              <TabsList className="max-w-full justify-start overflow-x-auto">
                 <TabsTrigger value="months">Months</TabsTrigger>
                 <TabsTrigger value="year">Yearly stats</TabsTrigger>
               </TabsList>

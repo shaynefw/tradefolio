@@ -12,7 +12,9 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
+      // Recessed tray, so the keys sitting in it read as raised.
+      "inline-flex items-center justify-center gap-1.5 rounded-xl border border-black/30! bg-black/20 p-1.5 text-muted-foreground",
+      "shadow-[inset_0_2px_4px_rgba(0,0,0,0.35)]",
       className
     )}
     {...props}
@@ -27,14 +29,21 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      // Base
-      "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ring-offset-background transition-all cursor-pointer",
+      // Base — a physical key. Bottom shadow is the "edge" that gives depth.
+      "relative inline-flex select-none items-center justify-center whitespace-nowrap rounded-lg border px-3.5 py-1.5 text-sm font-semibold ring-offset-background transition-all duration-100 cursor-pointer",
       // Focus / disabled
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
-      // Inactive → subtle muted text, brighter on hover
-      "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-      // Active → filled tile with a colored underline for extra contrast
-      "data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-inset data-[state=active]:ring-primary/40",
+      // Inactive → raised dark key: top highlight + hard bottom edge
+      "border-white/10! bg-secondary text-muted-foreground",
+      "shadow-[0_3px_0_0_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.07)]",
+      "hover:-translate-y-px hover:bg-accent hover:text-foreground",
+      "hover:shadow-[0_4px_0_0_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.12)]",
+      // Press → sink into the tray
+      "active:translate-y-[2px] active:shadow-[0_1px_0_0_rgba(0,0,0,0.55)]",
+      // Selected → bright key, inverted text, unmistakably the current one
+      "data-[state=active]:border-white/25! data-[state=active]:bg-foreground data-[state=active]:text-background",
+      "data-[state=active]:shadow-[0_3px_0_0_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.55)]",
+      "data-[state=active]:hover:bg-foreground data-[state=active]:hover:text-background",
       className
     )}
     {...props}

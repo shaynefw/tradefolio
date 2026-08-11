@@ -618,7 +618,7 @@ export default function Backtest() {
         {/* Ready to render */}
         {ds && core && (
           <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
-            <TabsList className="bg-card/60 max-w-full justify-start overflow-x-auto">
+            <TabsList className="max-w-full justify-start overflow-x-auto">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="timing">Timing / Sequence</TabsTrigger>
               <TabsTrigger value="scaling">Scaling</TabsTrigger>

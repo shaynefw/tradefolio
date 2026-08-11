@@ -43,7 +43,7 @@ export default function Calculators() {
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="bg-card/60 max-w-full justify-start overflow-x-auto">
+          <TabsList className="max-w-full justify-start overflow-x-auto">
             <TabsTrigger value="size">Position Size</TabsTrigger>
             <TabsTrigger value="percent">Percentages</TabsTrigger>
           </TabsList>
