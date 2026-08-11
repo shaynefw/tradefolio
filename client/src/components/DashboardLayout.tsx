@@ -50,7 +50,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Tags", icon: Tag, href: "/tags" },
   { label: "Strategies", icon: Target, href: "/strategies" },
   { label: "Backtesting", icon: FlaskConical, href: "/backtest" },
-  { label: "Position Size", icon: Calculator, href: "/size" },
+  { label: "Calculators", icon: Calculator, href: "/calculators" },
   { label: "Settings", icon: Settings, href: "/settings" },
 ];
 

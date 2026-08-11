@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Calculator, AlertTriangle, Info, TrendingUp } from "lucide-react";
+import { AlertTriangle, Info, TrendingUp } from "lucide-react";
 
-import DashboardLayout from "../components/DashboardLayout";
 import { Card, CardContent } from "../components/ui/card";
 import { cn } from "../lib/utils";
 
@@ -71,7 +70,7 @@ function loadState(): State {
 const money = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
-export default function SizeCalculator() {
+export default function PositionSizePanel() {
   const [s, setS] = useState<State>(loadState);
   useEffect(() => {
     try {
@@ -183,19 +182,11 @@ export default function SizeCalculator() {
   const cantSize = calc.contracts === 0 && calc.riskPerContract > 0;
 
   return (
-    <DashboardLayout>
-      <div className="p-4 sm:p-6 space-y-6">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15">
-            <Calculator className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">Position Size</h1>
-            <p className="text-sm text-muted-foreground">
-              Risk-based contract sizing for futures. Always rounds down to stay at or under your risk cap.
-            </p>
-          </div>
-        </div>
+    <>
+      <div className="space-y-6">
+        <p className="text-sm text-muted-foreground">
+          Risk-based contract sizing for futures. Always rounds down to stay at or under your risk cap.
+        </p>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* Inputs */}
@@ -525,7 +516,7 @@ export default function SizeCalculator() {
           {" "}Values are stored locally in your browser.
         </p>
       </div>
-    </DashboardLayout>
+    </>
   );
 }
 
