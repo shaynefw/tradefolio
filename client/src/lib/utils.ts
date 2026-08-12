@@ -16,21 +16,23 @@ export function formatCurrency(value: number | null | undefined, decimals = 2): 
 }
 
 // Currency-aware formatter for the investor ledger, where a book can be CAD or
-// USD. Uses the standard symbol so CAD renders "CA$" and USD renders "$",
-// disambiguating amounts that are otherwise identical numbers.
+// USD. Prefixes an explicit "CA$" / "US$" (Intl only distinguishes CAD as
+// "CA$" and leaves USD as a bare "$") so clients viewing a share link can tell
+// the two apart at a glance.
 export function formatMoney(
   value: number | null | undefined,
   currency = "USD",
   decimals = 2,
 ): string {
   if (value == null) return "—";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    currencyDisplay: "symbol",
+  const prefix =
+    currency === "CAD" ? "CA$" : currency === "USD" ? "US$" : `${currency} `;
+  const sign = value < 0 ? "-" : "";
+  const n = new Intl.NumberFormat("en-US", {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
-  }).format(value);
+  }).format(Math.abs(value));
+  return `${sign}${prefix}${n}`;
 }
 
 export function formatDate(ts: number | null | undefined): string {
