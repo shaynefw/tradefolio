@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { Card, CardContent } from "../components/ui/card";
-import { cn, formatCurrency, pnlColor } from "../lib/utils";
+import { cn, formatMoney, pnlColor } from "../lib/utils";
 import { MONTHS, type PeriodView } from "./calculations";
 
 const pctStr = (n: number) => `${(n * 100).toFixed(2)}%`;
@@ -23,10 +23,13 @@ interface Cell {
 export function YearCalendar({
   periods,
   year,
+  currency = "USD",
 }: {
   periods: PeriodView[];
   year: number;
+  currency?: string;
 }) {
+  const $ = (n: number) => formatMoney(n, currency);
   const [investorId, setInvestorId] = useState<number | "fund">("fund");
 
   // Everyone who appears anywhere in the selected year.
@@ -165,10 +168,10 @@ export function YearCalendar({
                   )}
                 >
                   {c.net >= 0 ? "+" : ""}
-                  {formatCurrency(c.net)}
+                  {$(c.net)}
                 </p>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  capital {formatCurrency(c.capital)}
+                  capital {$(c.capital)}
                 </p>
               </>
             ) : (
@@ -186,7 +189,7 @@ export function YearCalendar({
             <span className="text-muted-foreground">Net </span>
             <span className={cn("font-semibold tabular-nums", pnlColor(totalNet))}>
               {totalNet >= 0 ? "+" : ""}
-              {formatCurrency(totalNet)}
+              {$(totalNet)}
             </span>
           </span>
           <span>

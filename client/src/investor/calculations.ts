@@ -33,6 +33,7 @@ export interface RawEntry {
   periodId: number;
   investorId: number;
   contribution: number;
+  withdrawalFee?: number;
 }
 
 export interface InvestorRow {
@@ -45,6 +46,8 @@ export interface InvestorRow {
   net: number;
   pct: number; // gross / contribution, 0..1
   netPct: number; // net / contribution, 0..1
+  withdrawalFee: number; // wire fee this investor bore this month
+  nextOpening: number; // contribution + net − withdrawalFee (carries forward)
 }
 
 export interface PeriodView {
@@ -74,6 +77,9 @@ export function buildPeriodView(
 ): PeriodView {
   const mine = entries.filter((e) => e.periodId === period.id);
   const byInvestor = new Map(mine.map((e) => [e.investorId, e.contribution]));
+  const feeByInvestor = new Map(
+    mine.map((e) => [e.investorId, e.withdrawalFee ?? 0]),
+  );
 
   // Only investors with a row in this month appear — someone added later
   // shouldn't retroactively show up in earlier months.
@@ -85,6 +91,7 @@ export function buildPeriodView(
 
   const rows: InvestorRow[] = present.map((i) => {
     const contribution = byInvestor.get(i.id) ?? 0;
+    const withdrawalFee = feeByInvestor.get(i.id) ?? 0;
     const weight = totalCapital > 0 ? contribution / totalCapital : 0;
     const gross = weight * period.totalProfit;
     const fee = weight * period.totalFees;
@@ -99,6 +106,8 @@ export function buildPeriodView(
       net,
       pct: contribution > 0 ? gross / contribution : 0,
       netPct: contribution > 0 ? net / contribution : 0,
+      withdrawalFee,
+      nextOpening: Math.round((contribution + net - withdrawalFee) * 100) / 100,
     };
   });
 

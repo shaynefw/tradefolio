@@ -218,6 +218,11 @@ export const investorFunds = sqliteTable("investor_funds", {
   name: text("name").notNull(),
   // Free-form blurb shown to clients on the shared page (strategy, terms…).
   notes: text("notes"),
+  // Display currency for the whole book. No FX conversion — the owner enters
+  // amounts directly in this currency; the label just disambiguates CA$ vs $.
+  currency: text("currency", { enum: ["CAD", "USD"] })
+    .default("CAD")
+    .notNull(),
   // Unguessable token for the public read-only client view. null = private.
   shareToken: text("share_token"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
@@ -272,4 +277,8 @@ export const investorEntries = sqliteTable("investor_entries", {
     .notNull()
     .references(() => investors.id, { onDelete: "cascade" }),
   contribution: real("contribution").default(0).notNull(),
+  // Optional wire/withdrawal fee charged to this investor this month. Does not
+  // affect the current month's pro-rata split; it's deducted from this
+  // investor's opening capital when the next month carries forward.
+  withdrawalFee: real("withdrawal_fee").default(0).notNull(),
 });

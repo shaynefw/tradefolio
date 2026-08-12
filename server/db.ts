@@ -206,6 +206,16 @@ export async function initDb() {
     "status",
     "TEXT NOT NULL DEFAULT 'active'",
   );
+  await addColumnIfMissing(
+    "investor_funds",
+    "currency",
+    "TEXT NOT NULL DEFAULT 'CAD'",
+  );
+  await addColumnIfMissing(
+    "investor_entries",
+    "withdrawal_fee",
+    "REAL NOT NULL DEFAULT 0",
+  );
   await migrateOutcomeAllowBreakeven();
 }
 

@@ -5,7 +5,7 @@ import { Loader2, TrendingUp, Users } from "lucide-react";
 import { trpc } from "../lib/trpc";
 import { Card, CardContent } from "../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { cn, formatCurrency, pnlColor } from "../lib/utils";
+import { cn, formatMoney, pnlColor } from "../lib/utils";
 import { buildPeriodView, type PeriodView } from "../investor/calculations";
 import { MonthTable } from "../investor/MonthTable";
 import { YearlyStats } from "./Investors";
@@ -34,6 +34,7 @@ export default function SharedInvestors() {
   );
   const [tab, setTab] = useState("months");
   const latest = periods[0] ?? null;
+  const currency = (query.data?.fund.currency ?? "CAD") as string;
 
   return (
     <div className="min-h-screen bg-background">
@@ -87,10 +88,10 @@ export default function SharedInvestors() {
 
             {latest && (
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                <Tile label="Capital" value={formatCurrency(latest.totalCapital)} />
+                <Tile label="Capital" value={formatMoney(latest.totalCapital, currency)} />
                 <Tile
                   label={`${latest.label} net`}
-                  value={formatCurrency(latest.netProfit)}
+                  value={formatMoney(latest.netProfit, currency)}
                   tone={latest.netProfit}
                 />
                 <Tile
@@ -98,7 +99,7 @@ export default function SharedInvestors() {
                   value={pctStr(latest.netPct)}
                   tone={latest.netPct}
                 />
-                <Tile label="Fees" value={formatCurrency(latest.totalFees)} />
+                <Tile label="Fees" value={formatMoney(latest.totalFees, currency)} />
               </div>
             )}
 
@@ -117,21 +118,21 @@ export default function SharedInvestors() {
                         <p className="text-sm">
                           <span className="text-muted-foreground">Net </span>
                           <span className={cn("font-semibold", pnlColor(p.netProfit))}>
-                            {formatCurrency(p.netProfit)}
+                            {formatMoney(p.netProfit, currency)}
                           </span>
                           <span className={cn("ml-2", pnlColor(p.netPct))}>
                             ({pctStr(p.netPct)})
                           </span>
                         </p>
                       </div>
-                      <MonthTable period={p} />
+                      <MonthTable period={p} currency={currency} />
                     </CardContent>
                   </Card>
                 ))}
               </TabsContent>
 
               <TabsContent value="year" className="mt-6">
-                <YearlyStats periods={periods} years={years} />
+                <YearlyStats periods={periods} years={years} currency={currency} />
               </TabsContent>
             </Tabs>
           </>

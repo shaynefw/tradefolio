@@ -26,7 +26,7 @@ import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { trpc } from "../lib/trpc";
-import { cn, formatCurrency, pnlColor } from "../lib/utils";
+import { cn, formatMoney, pnlColor } from "../lib/utils";
 import {
   MONTHS,
   buildCumulativeSeries,
@@ -99,6 +99,14 @@ export default function Investors() {
     onSuccess: () => invalidate(),
     onError: (e) => toast.error(e.message ?? "Failed"),
   });
+  const setWithdrawalFee = trpc.investor.setWithdrawalFee.useMutation({
+    onSuccess: () => invalidate(),
+    onError: (e) => toast.error(e.message ?? "Failed"),
+  });
+  const updateFund = trpc.investor.updateFund.useMutation({
+    onSuccess: () => invalidate(),
+    onError: (e) => toast.error(e.message ?? "Failed"),
+  });
   const enableShare = trpc.investor.enableSharing.useMutation({
     onSuccess: () => invalidate(),
     onError: (e) => toast.error(e.message ?? "Failed"),
@@ -163,6 +171,7 @@ export default function Investors() {
   }
 
   const fund = book?.fund;
+  const currency = (fund?.currency ?? "CAD") as "CAD" | "USD";
   const shareUrl = fund?.shareToken
     ? `${window.location.origin}/shared/investors/${fund.shareToken}`
     : null;
@@ -196,6 +205,31 @@ export default function Investors() {
               <Plus className="h-3.5 w-3.5" />
               Book
             </Button>
+            {fund && (
+              <div
+                className="inline-flex overflow-hidden rounded-md border border-border"
+                title="Book currency (display only — no conversion)"
+              >
+                {(["CAD", "USD"] as const).map((code) => (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() =>
+                      code !== currency &&
+                      updateFund.mutate({ id: fund.id, currency: code })
+                    }
+                    className={cn(
+                      "px-2.5 py-2 text-xs font-medium transition-colors",
+                      currency === code
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {code}
+                  </button>
+                ))}
+              </div>
+            )}
             {fund && (
               <Button
                 size="sm"
@@ -278,6 +312,7 @@ export default function Investors() {
                     <MonthCard
                       key={p.id}
                       period={p}
+                      currency={currency}
                       onSetProfit={(v) =>
                         updatePeriod.mutate({ id: p.id, totalProfit: v })
                       }
@@ -301,6 +336,23 @@ export default function Investors() {
                           contribution: v,
                         });
                       }}
+                      onEditWithdrawalFee={(investorId, name, current) => {
+                        const raw = prompt(
+                          `${name}'s withdrawal fee for ${p.label}\n(deducted from next month's opening balance — 0 to clear)`,
+                          String(current),
+                        );
+                        if (raw == null) return;
+                        const v = Number(raw.replace(/[$,]/g, ""));
+                        if (!Number.isFinite(v) || v < 0) {
+                          toast.error("Enter a non-negative number");
+                          return;
+                        }
+                        setWithdrawalFee.mutate({
+                          periodId: p.id,
+                          investorId,
+                          withdrawalFee: v,
+                        });
+                      }}
                       onDelete={() => {
                         if (confirm(`Delete ${p.label} from this book?`))
                           deletePeriod.mutate({ id: p.id });
@@ -311,7 +363,7 @@ export default function Investors() {
               </TabsContent>
 
               <TabsContent value="year" className="mt-6">
-                <YearlyStats periods={periods} years={years} />
+                <YearlyStats periods={periods} years={years} currency={currency} />
               </TabsContent>
             </Tabs>
           </>
@@ -490,15 +542,19 @@ function AddMonthBar({
 
 function MonthCard({
   period,
+  currency,
   onSetProfit,
   onSetFees,
   onEditContribution,
+  onEditWithdrawalFee,
   onDelete,
 }: {
   period: PeriodView;
+  currency: string;
   onSetProfit: (v: number) => void;
   onSetFees: (v: number) => void;
   onEditContribution: (investorId: number, name: string, current: number) => void;
+  onEditWithdrawalFee: (investorId: number, name: string, current: number) => void;
   onDelete: () => void;
 }) {
   const [profit, setProfit] = useState(String(period.totalProfit));
@@ -561,25 +617,33 @@ function MonthCard({
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label="Total capital" value={formatCurrency(period.totalCapital)} />
+          <Stat label="Total capital" value={formatMoney(period.totalCapital, currency)} />
           <Stat
             label="Gross P&L"
-            value={formatCurrency(period.totalProfit)}
+            value={formatMoney(period.totalProfit, currency)}
             tone={period.totalProfit}
           />
           <Stat
             label="Net P&L (after fees)"
-            value={formatCurrency(period.netProfit)}
+            value={formatMoney(period.netProfit, currency)}
             tone={period.netProfit}
           />
           <Stat label="Net return" value={pctStr(period.netPct)} tone={period.netPct} />
         </div>
 
-        <MonthTable period={period} editable onEditContribution={onEditContribution} />
+        <MonthTable
+          period={period}
+          currency={currency}
+          editable
+          onEditContribution={onEditContribution}
+          onEditWithdrawalFee={onEditWithdrawalFee}
+        />
         <p className="text-xs text-muted-foreground">
           Click any contribution to change it — use that to record a deposit or
-          withdrawal. Everything else is derived pro-rata, and next month opens
-          with this month's net P&L rolled into each balance.
+          withdrawal. Click a withdrawal fee to charge a wire fee to that
+          investor; it's deducted from their opening balance next month.
+          Everything else is derived pro-rata, and next month opens with this
+          month's net P&L rolled into each balance.
         </p>
       </CardContent>
     </Card>
@@ -615,10 +679,13 @@ function Stat({
 export function YearlyStats({
   periods,
   years,
+  currency = "USD",
 }: {
   periods: PeriodView[];
   years: number[];
+  currency?: string;
 }) {
+  const $ = (n: number, d = 2) => formatMoney(n, currency, d);
   const [year, setYear] = useState(years[0] ?? new Date().getFullYear());
   useEffect(() => {
     if (years.length > 0 && !years.includes(year)) setYear(years[0]);
@@ -661,16 +728,16 @@ export function YearlyStats({
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        <Stat label="Current capital" value={formatCurrency(summary.latestCapital)} />
+        <Stat label="Current capital" value={$(summary.latestCapital)} />
         <Stat
           label={`${year} gross P&L`}
-          value={formatCurrency(summary.totalProfit)}
+          value={$(summary.totalProfit)}
           tone={summary.totalProfit}
         />
-        <Stat label="Fees" value={formatCurrency(summary.totalFees)} />
+        <Stat label="Fees" value={$(summary.totalFees)} />
         <Stat
           label="Net P&L"
-          value={formatCurrency(summary.netProfit)}
+          value={$(summary.netProfit)}
           tone={summary.netProfit}
         />
         <Stat
@@ -679,7 +746,7 @@ export function YearlyStats({
         />
       </div>
 
-      <YearCalendar periods={periods} year={year} />
+      <YearCalendar periods={periods} year={year} currency={currency} />
 
       {series.length > 0 && (
         <Card className="bg-card/60">
@@ -696,7 +763,7 @@ export function YearlyStats({
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} />
                 <YAxis
-                  tickFormatter={(v) => formatCurrency(v, 0)}
+                  tickFormatter={(v) => $(v, 0)}
                   tick={{ fontSize: 11, fill: "#6b7280" }}
                   tickLine={false}
                   axisLine={false}
@@ -708,10 +775,10 @@ export function YearlyStats({
                       <div className="rounded-lg border border-border bg-zinc-900 px-3 py-2 text-sm shadow-xl">
                         <p className="mb-1 text-muted-foreground">{label}</p>
                         <p className="font-semibold">
-                          Cumulative {formatCurrency(Number(payload[0].value))}
+                          Cumulative {$(Number(payload[0].value))}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Month {formatCurrency(Number(payload[0].payload.net))}
+                          Month {$(Number(payload[0].payload.net))}
                         </p>
                       </div>
                     ) : null
@@ -755,16 +822,16 @@ export function YearlyStats({
                       {v.months}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
-                      {formatCurrency(v.latestContribution)}
+                      {$(v.latestContribution)}
                     </td>
                     <td className={cn("px-3 py-2 text-right tabular-nums", pnlColor(v.grossTotal))}>
-                      {formatCurrency(v.grossTotal)}
+                      {$(v.grossTotal)}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                      {formatCurrency(v.feeTotal)}
+                      {$(v.feeTotal)}
                     </td>
                     <td className={cn("px-3 py-2 text-right font-semibold tabular-nums", pnlColor(v.netTotal))}>
-                      {formatCurrency(v.netTotal)}
+                      {$(v.netTotal)}
                     </td>
                     <td className={cn("px-3 py-2 text-right font-semibold tabular-nums", pnlColor(v.netReturn))}>
                       {pctStr(v.netReturn)}

@@ -81,6 +81,7 @@ export const investorRouter = router({
       z.object({
         name: z.string().min(1).max(100),
         notes: z.string().nullable().optional(),
+        currency: z.enum(["CAD", "USD"]).default("CAD"),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -90,6 +91,7 @@ export const investorRouter = router({
           userId: ctx.user.id,
           name: input.name,
           notes: input.notes ?? null,
+          currency: input.currency,
         })
         .returning();
       return fund;
@@ -101,6 +103,7 @@ export const investorRouter = router({
         id: z.number(),
         name: z.string().min(1).max(100).optional(),
         notes: z.string().nullable().optional(),
+        currency: z.enum(["CAD", "USD"]).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -274,7 +277,12 @@ export const investorRouter = router({
               rows.map((r) => {
                 const weight =
                   totalCapital > 0 ? r.contribution / totalCapital : 0;
-                const next = r.contribution + weight * distributable;
+                // Opening capital = balance + pro-rata net P&L − any withdrawal
+                // (wire) fee that investor bore this month.
+                const next =
+                  r.contribution +
+                  weight * distributable -
+                  (r.withdrawalFee ?? 0);
                 // Round to cents so float drift can't accumulate across months.
                 return [r.investorId, Math.round(next * 100) / 100];
               }),
@@ -382,6 +390,55 @@ export const investorRouter = router({
       return created;
     }),
 
+  // Optional wire/withdrawal fee charged to one investor this month. Upserts
+  // the entry so it works even before a contribution has been set.
+  setWithdrawalFee: protectedProcedure
+    .input(
+      z.object({
+        periodId: z.number(),
+        investorId: z.number(),
+        withdrawalFee: z.number().min(0),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [p] = await db
+        .select()
+        .from(schema.investorPeriods)
+        .where(eq(schema.investorPeriods.id, input.periodId))
+        .limit(1);
+      if (!p) throw new TRPCError({ code: "NOT_FOUND" });
+      await getOwnedFund(ctx.user.id, p.fundId);
+
+      const [existing] = await db
+        .select()
+        .from(schema.investorEntries)
+        .where(
+          and(
+            eq(schema.investorEntries.periodId, input.periodId),
+            eq(schema.investorEntries.investorId, input.investorId),
+          ),
+        )
+        .limit(1);
+
+      if (existing) {
+        const [updated] = await db
+          .update(schema.investorEntries)
+          .set({ withdrawalFee: input.withdrawalFee })
+          .where(eq(schema.investorEntries.id, existing.id))
+          .returning();
+        return updated;
+      }
+      const [created] = await db
+        .insert(schema.investorEntries)
+        .values({
+          periodId: input.periodId,
+          investorId: input.investorId,
+          withdrawalFee: input.withdrawalFee,
+        })
+        .returning();
+      return created;
+    }),
+
   // --- sharing -------------------------------------------------------------
   enableSharing: protectedProcedure
     .input(z.object({ id: z.number() }))
@@ -425,7 +482,12 @@ export const investorRouter = router({
       const book = await loadBook(fund.id);
       // Never leak the owner's user id or the token itself.
       return {
-        fund: { id: fund.id, name: fund.name, notes: fund.notes },
+        fund: {
+          id: fund.id,
+          name: fund.name,
+          notes: fund.notes,
+          currency: fund.currency,
+        },
         ...book,
       };
     }),
