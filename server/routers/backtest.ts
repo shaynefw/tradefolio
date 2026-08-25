@@ -79,6 +79,9 @@ interface ScheduleLevel {
   recovery2Risk: number | null;
   recovery1Profit: number | null;
   recovery2Profit: number | null;
+  dollarsPerPoint: number | null;
+  recovery1DollarsPerPoint: number | null;
+  recovery2DollarsPerPoint: number | null;
 }
 
 // Parses a JSON-encoded ScalingSchedule from a dataset column. Returns null
@@ -111,6 +114,16 @@ function parseSchedule(raw: string | null): ScheduleLevel[] | null {
             typeof it.recovery1Profit === "number" ? it.recovery1Profit : null,
           recovery2Profit:
             typeof it.recovery2Profit === "number" ? it.recovery2Profit : null,
+          dollarsPerPoint:
+            typeof it.dollarsPerPoint === "number" ? it.dollarsPerPoint : null,
+          recovery1DollarsPerPoint:
+            typeof it.recovery1DollarsPerPoint === "number"
+              ? it.recovery1DollarsPerPoint
+              : null,
+          recovery2DollarsPerPoint:
+            typeof it.recovery2DollarsPerPoint === "number"
+              ? it.recovery2DollarsPerPoint
+              : null,
         });
       }
     }
@@ -146,10 +159,27 @@ function pnlFromSchedule(
   schedule: ScheduleLevel[],
   outcome: "Took Profit" | "Took Loss" | "Breakeven",
   recoveryStage: "none" | "first" | "second",
+  fluid = false,
+  points: number | null = null,
 ): number | null {
   if (outcome === "Breakeven") return 0;
   const lvl = findLevel(balance, schedule);
   if (!lvl) return null;
+
+  // Fluid: dollar result = ± realized points × the level's $/point.
+  if (fluid) {
+    if (points == null) return null;
+    const dpp =
+      recoveryStage === "first"
+        ? lvl.recovery1DollarsPerPoint ?? lvl.dollarsPerPoint
+        : recoveryStage === "second"
+          ? lvl.recovery2DollarsPerPoint ?? lvl.dollarsPerPoint
+          : lvl.dollarsPerPoint;
+    if (dpp == null) return null;
+    const sign = outcome === "Took Profit" ? 1 : -1;
+    return Math.round(sign * Math.abs(points) * dpp * 100) / 100;
+  }
+
   if (outcome === "Took Profit") {
     if (recoveryStage === "first" && lvl.recovery1Profit != null)
       return lvl.recovery1Profit;
@@ -378,6 +408,7 @@ const datasetRouter = router({
       let premiumBalance = ds.premiumStartBalance ?? 0;
       let speedBalance = ds.speedStartBalance ?? 0;
       let filled = 0;
+      const fluid = ds.tpMode === "fluid" || ds.slMode === "fluid";
 
       await db.transaction(async (tx) => {
         for (const t of trades) {
@@ -401,6 +432,17 @@ const datasetRouter = router({
             updatedAt?: Date;
           } = {};
 
+          // For fluid datasets the dollar result comes from realized points:
+          // the stored resultPoints, else MFE (win) / MAE (loss).
+          const points = fluid
+            ? t.resultPoints ??
+              (t.outcome === "Took Profit"
+                ? t.mfe
+                : t.outcome === "Took Loss"
+                  ? t.mae
+                  : null)
+            : null;
+
           // Treat 0 as "still blank" — a genuine 0 is rare in scaling PnL
           // and a leftover 0 from earlier UI states is the common cause.
           if (premiumSchedule && (t.premiumPnl == null || t.premiumPnl === 0)) {
@@ -409,6 +451,8 @@ const datasetRouter = router({
               premiumSchedule,
               t.outcome,
               t.recoveryStage,
+              fluid,
+              points,
             );
             if (sug != null) patch.premiumPnl = sug;
           }
@@ -418,6 +462,8 @@ const datasetRouter = router({
               speedSchedule,
               t.outcome,
               t.recoveryStage,
+              fluid,
+              points,
             );
             if (sug != null) patch.speedPnl = sug;
           }
