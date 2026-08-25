@@ -106,6 +106,12 @@ export interface ScalingLevel {
   // profitPerTrade when absent.
   recovery1Profit?: number | null;
   recovery2Profit?: number | null;
+  // Fluid schedules (dataset TP/SL is fluid): the dollar value of one point at
+  // this level, so auto-PnL = ± (trade's realized points) × $/point. Recovery
+  // stages fall back to dollarsPerPoint when their own value is absent.
+  dollarsPerPoint?: number | null;
+  recovery1DollarsPerPoint?: number | null;
+  recovery2DollarsPerPoint?: number | null;
 }
 
 export type ScalingSchedule = ScalingLevel[];

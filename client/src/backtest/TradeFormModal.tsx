@@ -257,17 +257,30 @@ export function TradeFormModal({
     if (!open || isEdit) return;
     if (form.isPending) return;
     const outcome = (form.outcome || null) as Outcome | null;
+    // For fluid datasets the schedule stores $/point, so pass the trade's
+    // realized points (Result field, else MFE win / MAE loss).
+    const fluidPts =
+      num(form.resultPoints) ??
+      (outcome === "Took Profit"
+        ? num(form.mfe)
+        : outcome === "Took Loss"
+          ? num(form.mae)
+          : null);
     const premiumSug = suggestedPnl(
       premiumRefBalance,
       premiumSchedule,
       outcome,
       form.recoveryStage,
+      showResult,
+      fluidPts,
     );
     const speedSug = suggestedPnl(
       speedRefBalance,
       speedSchedule,
       outcome,
       form.recoveryStage,
+      showResult,
+      fluidPts,
     );
     setForm((f) => ({
       ...f,
@@ -280,6 +293,10 @@ export function TradeFormModal({
     form.isPending,
     form.outcome,
     form.recoveryStage,
+    form.resultPoints,
+    form.mfe,
+    form.mae,
+    showResult,
     premiumRefBalance,
     speedRefBalance,
     premiumSchedule,
@@ -663,6 +680,7 @@ export function TradeFormModal({
                     </Field>
                     <LevelPreview
                       level={premiumLevel}
+                      fluid={showResult}
                       onPick={(v) => setForm((f) => ({ ...f, premiumPnl: String(v) }))}
                     />
                     <Field label="Reset balance to">
@@ -702,6 +720,7 @@ export function TradeFormModal({
                     </Field>
                     <LevelPreview
                       level={speedLevel}
+                      fluid={showResult}
                       onPick={(v) => setForm((f) => ({ ...f, speedPnl: String(v) }))}
                     />
                     <Field label="Reset balance to">
@@ -772,11 +791,39 @@ const inputClass =
 function LevelPreview({
   level,
   onPick,
+  fluid = false,
 }: {
   level: import("./types").ScalingLevel | null;
   onPick: (value: number) => void;
+  fluid?: boolean;
 }) {
   if (!level) return null;
+  // Fluid schedules hold $/point, not fixed profit/risk — show those instead.
+  if (fluid) {
+    const dpps: Array<{ label: string; value: number | null | undefined }> = [
+      { label: "$/pt", value: level.dollarsPerPoint },
+      { label: "R1 $/pt", value: level.recovery1DollarsPerPoint },
+      { label: "R2 $/pt", value: level.recovery2DollarsPerPoint },
+    ].filter((c) => c.value != null);
+    return (
+      <div className="flex flex-wrap items-center gap-1 pt-0.5">
+        <span className="text-[10px] text-muted-foreground">{level.name}:</span>
+        {dpps.map((c) => (
+          <span
+            key={c.label}
+            className="rounded bg-cyan-500/15 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-cyan-300"
+          >
+            {c.label} {formatCurrency(c.value as number)}
+          </span>
+        ))}
+        {dpps.length === 0 && (
+          <span className="text-[10px] text-muted-foreground">
+            set $/point in Dataset settings
+          </span>
+        )}
+      </div>
+    );
+  }
   const chips: Array<{ label: string; value: number }> = [
     { label: "Profit", value: level.profitPerTrade },
     { label: "Loss", value: -level.initialRisk },

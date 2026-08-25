@@ -228,6 +228,16 @@ function parseScalingSchedule(raw: string | null): ScalingSchedule | null {
             typeof it.recovery1Profit === "number" ? it.recovery1Profit : null,
           recovery2Profit:
             typeof it.recovery2Profit === "number" ? it.recovery2Profit : null,
+          dollarsPerPoint:
+            typeof it.dollarsPerPoint === "number" ? it.dollarsPerPoint : null,
+          recovery1DollarsPerPoint:
+            typeof it.recovery1DollarsPerPoint === "number"
+              ? it.recovery1DollarsPerPoint
+              : null,
+          recovery2DollarsPerPoint:
+            typeof it.recovery2DollarsPerPoint === "number"
+              ? it.recovery2DollarsPerPoint
+              : null,
         });
       }
     }

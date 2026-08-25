@@ -54,16 +54,36 @@ export function findCurrentLevel(
 // running balance at trade entry. Returns null when there's no schedule,
 // balance is below the first level, or the level lacks the specific risk
 // (e.g. R2 = "n/a" on a Speed level).
+// `fluid` datasets have no fixed profit/risk — the dollar result is the trade's
+// realized points × the level's dollars-per-point. Pass fluid=true and the
+// trade's realized points; returns null when points are unknown or the level
+// has no $/point set.
 export function suggestedPnl(
   balance: number,
   schedule: ScalingSchedule | null,
   outcome: Outcome | null,
   recoveryStage: RecoveryStage,
+  fluid = false,
+  points: number | null = null,
 ): number | null {
   if (!outcome) return null;
   if (outcome === "Breakeven") return 0;
   const level = findCurrentLevel(balance, schedule);
   if (!level) return null;
+
+  if (fluid) {
+    if (points == null) return null;
+    const dpp =
+      recoveryStage === "first"
+        ? level.recovery1DollarsPerPoint ?? level.dollarsPerPoint
+        : recoveryStage === "second"
+          ? level.recovery2DollarsPerPoint ?? level.dollarsPerPoint
+          : level.dollarsPerPoint;
+    if (dpp == null) return null;
+    const sign = outcome === "Took Profit" ? 1 : -1;
+    return Math.round(sign * Math.abs(points) * dpp * 100) / 100;
+  }
+
   if (outcome === "Took Profit") {
     if (recoveryStage === "first" && level.recovery1Profit != null)
       return level.recovery1Profit;

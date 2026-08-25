@@ -1248,33 +1248,37 @@ function DatasetSettingsDialog({
               <p className="text-xs uppercase tracking-wider text-muted-foreground">
                 Scaling schedules (auto-PnL)
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setPremiumSchedule(IRENKO20_PREMIUM_SCHEDULE);
-                  setSpeedSchedule(IRENKO20_SPEED_SCHEDULE);
-                }}
-                className="text-[10px] text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
-              >
-                Load iRenko20 preset
-              </button>
+              {tpMode !== "fluid" && slMode !== "fluid" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPremiumSchedule(IRENKO20_PREMIUM_SCHEDULE);
+                    setSpeedSchedule(IRENKO20_SPEED_SCHEDULE);
+                  }}
+                  className="text-[10px] text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+                >
+                  Load iRenko20 preset
+                </button>
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Each row = one level. When adding a trade, the modal picks the
-              highest level whose recommended balance ≤ current running balance
-              and pre-fills PnL based on outcome + recovery stage.
+              {tpMode === "fluid" || slMode === "fluid"
+                ? "This dataset is fluid, so levels hold $ per point. Auto-PnL = each trade's Result points × the $/point at your balance level."
+                : "Each row = one level. When adding a trade, the modal picks the highest level whose recommended balance ≤ current running balance and pre-fills PnL based on outcome + recovery stage."}
             </p>
             <ScheduleEditor
               label="Premium"
               accentClass="text-emerald-300"
               schedule={premiumSchedule}
               onChange={setPremiumSchedule}
+              fluid={tpMode === "fluid" || slMode === "fluid"}
             />
             <ScheduleEditor
               label="Speed"
               accentClass="text-sky-300"
               schedule={speedSchedule}
               onChange={setSpeedSchedule}
+              fluid={tpMode === "fluid" || slMode === "fluid"}
             />
             <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border bg-card/40 p-2">
               <div className="flex-1 text-xs text-muted-foreground">
@@ -1394,11 +1398,13 @@ function ScheduleEditor({
   accentClass,
   schedule,
   onChange,
+  fluid = false,
 }: {
   label: string;
   accentClass: string;
   schedule: ScalingSchedule;
   onChange: (next: ScalingSchedule) => void;
+  fluid?: boolean;
 }) {
   function updateLevel(i: number, patch: Partial<ScalingLevel>) {
     onChange(schedule.map((lvl, idx) => (idx === i ? { ...lvl, ...patch } : lvl)));
@@ -1407,19 +1413,51 @@ function ScheduleEditor({
     const last = schedule[schedule.length - 1];
     onChange([
       ...schedule,
-      {
-        name: `${label[0].toLowerCase()}${schedule.length + 1}`,
-        recommendedBalance: last ? last.recommendedBalance * 2 : 2560,
-        profitPerTrade: last ? last.profitPerTrade * 2 : 80,
-        initialRisk: last ? last.initialRisk * 2 : 320,
-        recovery1Risk: last ? last.recovery1Risk * 2 : 1280,
-        recovery2Risk: last?.recovery2Risk != null ? last.recovery2Risk * 2 : null,
-      },
+      fluid
+        ? {
+            name: `${label[0].toLowerCase()}${schedule.length + 1}`,
+            recommendedBalance: last ? last.recommendedBalance * 2 : 5000,
+            // Fixed fields unused in fluid mode but required by the type.
+            profitPerTrade: 0,
+            initialRisk: 0,
+            recovery1Risk: 0,
+            recovery2Risk: null,
+            dollarsPerPoint: last?.dollarsPerPoint != null ? last.dollarsPerPoint * 2 : 2,
+          }
+        : {
+            name: `${label[0].toLowerCase()}${schedule.length + 1}`,
+            recommendedBalance: last ? last.recommendedBalance * 2 : 2560,
+            profitPerTrade: last ? last.profitPerTrade * 2 : 80,
+            initialRisk: last ? last.initialRisk * 2 : 320,
+            recovery1Risk: last ? last.recovery1Risk * 2 : 1280,
+            recovery2Risk: last?.recovery2Risk != null ? last.recovery2Risk * 2 : null,
+          },
     ]);
   }
   function removeLevel(i: number) {
     onChange(schedule.filter((_, idx) => idx !== i));
   }
+
+  const inputCls =
+    "h-7 rounded border border-border bg-background px-1.5 text-right text-xs text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring";
+  const dppCell = (i: number, key:
+    | "dollarsPerPoint"
+    | "recovery1DollarsPerPoint"
+    | "recovery2DollarsPerPoint") => (
+    <td className="px-1.5 py-1">
+      <input
+        type="number"
+        step="any"
+        value={schedule[i][key] == null ? "" : String(schedule[i][key])}
+        placeholder={key === "dollarsPerPoint" ? "$/pt" : "—"}
+        onChange={(e) => {
+          const v = e.target.value.trim();
+          updateLevel(i, { [key]: v === "" ? null : Number(v) || 0 });
+        }}
+        className={cn(inputCls, "w-20")}
+      />
+    </td>
+  );
 
   return (
     <div className="rounded-md border border-border bg-card/40">
@@ -1432,8 +1470,65 @@ function ScheduleEditor({
       </div>
       {schedule.length === 0 ? (
         <p className="px-3 py-4 text-center text-xs text-muted-foreground">
-          No schedule yet — load the iRenko20 preset or add levels manually.
+          {fluid
+            ? "No schedule yet — add a level and set its $ per point."
+            : "No schedule yet — load the iRenko20 preset or add levels manually."}
         </p>
+      ) : fluid ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-muted/30 text-[10px] uppercase text-muted-foreground">
+              <tr>
+                <th className="px-2 py-1 text-left">Name</th>
+                <th className="px-2 py-1 text-right">Rec. balance</th>
+                <th className="px-2 py-1 text-right">$ / point</th>
+                <th className="px-2 py-1 text-right">R1 $/pt</th>
+                <th className="px-2 py-1 text-right">R2 $/pt</th>
+                <th className="w-8" />
+              </tr>
+            </thead>
+            <tbody>
+              {schedule.map((lvl, i) => (
+                <tr key={i} className="border-t border-border/40">
+                  <td className="px-1.5 py-1">
+                    <input
+                      type="text"
+                      value={lvl.name}
+                      onChange={(e) => updateLevel(i, { name: e.target.value })}
+                      className={cn(inputCls, "w-16 text-left")}
+                    />
+                  </td>
+                  <td className="px-1.5 py-1">
+                    <input
+                      type="number"
+                      step="any"
+                      value={lvl.recommendedBalance}
+                      onChange={(e) => updateLevel(i, { recommendedBalance: Number(e.target.value) || 0 })}
+                      className={cn(inputCls, "w-24")}
+                    />
+                  </td>
+                  {dppCell(i, "dollarsPerPoint")}
+                  {dppCell(i, "recovery1DollarsPerPoint")}
+                  {dppCell(i, "recovery2DollarsPerPoint")}
+                  <td className="px-1 py-1 text-right">
+                    <button
+                      type="button"
+                      onClick={() => removeLevel(i)}
+                      title="Remove level"
+                      className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive-foreground"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="px-3 py-2 text-[10px] text-muted-foreground">
+            Auto-PnL = each trade's Result points × the $/point at your balance
+            level. 1 MNQ = $2/pt, 2 = $4/pt, etc. R1/R2 optional (recovery size).
+          </p>
+        </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
