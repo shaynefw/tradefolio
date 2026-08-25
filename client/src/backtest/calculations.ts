@@ -340,6 +340,30 @@ export interface RrBucket {
   tradeCount: number; // trades whose MFE met or exceeded tpPoints
   winRate: number;    // tradeCount / total valid
   ez: number;         // 1 − winRate
+  fluidStop: boolean; // stopPoints came from the fluid average, not a fixed stop
+}
+
+// Effective stop distance in points: the fixed brick stop, or — when the
+// dataset's SL is fluid — the average realized loss (|resultPoints| ?? |MAE|).
+// Falls back to the brick stop when there are no losses to average yet, so a
+// fresh fluid dataset still produces a sensible ladder. Returns whether the
+// fluid average was actually used so the UI can label it.
+export function effectiveStopPoints(ds: BacktestDataset): {
+  stopPoints: number;
+  fluid: boolean;
+} {
+  const brickStop = ds.stopBricks * ds.brickPoints;
+  if (ds.slMode !== "fluid") return { stopPoints: brickStop, fluid: false };
+  const lossPts = ds.trades
+    .filter((t) => t.validEntry && t.outcome === "Took Loss")
+    .map((t) => {
+      const v = t.resultPoints ?? t.mae;
+      return v == null ? null : Math.abs(v);
+    })
+    .filter((v): v is number => v != null);
+  if (lossPts.length === 0) return { stopPoints: brickStop, fluid: false };
+  const avg = lossPts.reduce((s, v) => s + v, 0) / lossPts.length;
+  return { stopPoints: avg, fluid: true };
 }
 
 // Formats a numeric ratio as "1:N" — uses up to 2 decimals so user-chosen
@@ -352,10 +376,10 @@ function formatRrLabel(ratio: number): string {
   return `1:${rounded}RR`;
 }
 
-// Default ladder when the dataset hasn't customized buckets: the original
-// fixed 1:NRR rows where the target = N × stop_size_in_points.
-function defaultRrBuckets(ds: BacktestDataset) {
-  const stopPoints = ds.stopBricks * ds.brickPoints;
+// Default ladder when the dataset hasn't customized buckets: 1:NRR rows where
+// the target = N × the effective stop. For a fluid-SL dataset that stop is the
+// average realized loss, so the ladder reads as multiples of real average risk.
+function defaultRrBuckets(stopPoints: number) {
   return Array.from({ length: 5 }, (_, i) => ({
     tpPoints: (i + 1) * stopPoints,
     stopPoints,
@@ -365,10 +389,11 @@ function defaultRrBuckets(ds: BacktestDataset) {
 export function computeRrBuckets(ds: BacktestDataset): RrBucket[] {
   const valid = ds.trades.filter((t) => t.validEntry);
   const denom = valid.length;
-  const configs =
-    ds.rrBuckets && ds.rrBuckets.length > 0
-      ? ds.rrBuckets
-      : defaultRrBuckets(ds);
+  const { stopPoints: effStop, fluid } = effectiveStopPoints(ds);
+  // Custom buckets are respected verbatim (they carry their own stops); only
+  // the auto ladder adapts to the fluid average.
+  const usingCustom = !!(ds.rrBuckets && ds.rrBuckets.length > 0);
+  const configs = usingCustom ? ds.rrBuckets! : defaultRrBuckets(effStop);
 
   return configs.map((c) => {
     const tradeCount = valid.filter(
@@ -384,6 +409,7 @@ export function computeRrBuckets(ds: BacktestDataset): RrBucket[] {
       tradeCount,
       winRate,
       ez: 1 - winRate,
+      fluidStop: fluid && !usingCustom,
     };
   });
 }

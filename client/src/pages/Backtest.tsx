@@ -2270,7 +2270,11 @@ export function TimingTab({
           <SectionHeader
             icon={Layers}
             title="RR-bucket reach"
-            hint="RR = TP ÷ Stop. WR = trades whose MFE reached TP. Customize buckets in Dataset settings."
+            hint={
+              rr[0]?.fluidStop
+                ? "Buckets are multiples of your average risk (fluid stop). WR = trades whose MFE reached each level."
+                : "RR = TP ÷ Stop. WR = trades whose MFE reached TP. Customize buckets in Dataset settings."
+            }
           />
           <Card className="bg-card/60">
             <CardContent className="pt-5 pb-5">
@@ -2280,7 +2284,9 @@ export function TimingTab({
                     <tr>
                       <th className="px-3 py-2 text-left">RR</th>
                       <th className="px-3 py-2 text-right">TP (pts)</th>
-                      <th className="px-3 py-2 text-right">Stop (pts)</th>
+                      <th className="px-3 py-2 text-right">
+                        {rr[0]?.fluidStop ? "Avg risk (pts)" : "Stop (pts)"}
+                      </th>
                       <th className="px-3 py-2 text-right">WR</th>
                       <th className="px-3 py-2 text-right">Ez$</th>
                       <th className="px-3 py-2 text-right">Trades</th>
@@ -2289,9 +2295,20 @@ export function TimingTab({
                   <tbody>
                     {rr.map((r, i) => (
                       <tr key={`${r.tpPoints}-${r.stopPoints}-${i}`} className="border-t border-border/40">
-                        <td className="px-3 py-2 font-medium">{r.label}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{r.tpPoints}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{r.stopPoints}</td>
+                        <td className="px-3 py-2 font-medium">
+                          {r.label}
+                          {r.fluidStop && (
+                            <span className="ml-1.5 text-[10px] font-normal text-cyan-300">
+                              fluid
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                          {r.fluidStop ? Math.round(r.tpPoints) : r.tpPoints}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                          {r.fluidStop ? Math.round(r.stopPoints) : r.stopPoints}
+                        </td>
                         <td className="px-3 py-2 text-right text-green-400 font-semibold">{fmtPct(r.winRate)}</td>
                         <td className="px-3 py-2 text-right text-muted-foreground">{fmtPct(r.ez)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{r.tradeCount}</td>
@@ -2300,6 +2317,14 @@ export function TimingTab({
                   </tbody>
                 </table>
               </div>
+              {rr[0]?.fluidStop && (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Stop is fluid, so each rung is a multiple of your average loss
+                  (~{Math.round(rr[0].stopPoints)} pts). This shows how far
+                  winners ran vs. your real risk — i.e. whether a fixed target
+                  could have captured more than exiting on the next signal.
+                </p>
+              )}
             </CardContent>
           </Card>
         </section>
