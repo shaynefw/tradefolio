@@ -119,6 +119,14 @@ export const backtestDatasets = sqliteTable("backtest_datasets", {
   brickPoints: integer("brick_points").default(20).notNull(),
   stopBricks: integer("stop_bricks").default(8).notNull(),
   takeProfitBricks: integer("take_profit_bricks").default(2).notNull(),
+  // "fixed" uses the brick TP/SL above; "fluid" derives the effective TP/SL
+  // from the average realized points of winning / losing trades.
+  tpMode: text("tp_mode", { enum: ["fixed", "fluid"] })
+    .default("fixed")
+    .notNull(),
+  slMode: text("sl_mode", { enum: ["fixed", "fluid"] })
+    .default("fixed")
+    .notNull(),
   // Optional per-scaling starting balances. When set, the Scaling tab
   // computes a running balance from start + Σ pnl (honoring per-trade
   // resets); when null, that scaling is considered "not tracked".
@@ -171,6 +179,8 @@ export const backtestTrades = sqliteTable("backtest_trades", {
   outcome: text("outcome", { enum: ["Took Profit", "Took Loss", "Breakeven"] }), // null = pending
   mae: real("mae"), // points
   mfe: real("mfe"), // points
+  // Realized points at exit — used by fluid TP/SL datasets.
+  resultPoints: real("result_points"),
   recoveryStage: text("recovery_stage", { enum: ["none", "first", "second"] })
     .default("none")
     .notNull(),

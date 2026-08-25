@@ -34,6 +34,10 @@ export interface BacktestTrade {
   outcome: Outcome | null;
   mae: number | null;     // points; null when the CSV had "-"
   mfe: number | null;     // points
+  // Realized points captured (win) or lost (loss) at exit. Used when the
+  // dataset's TP or SL is "fluid" (exit-on-signal strategies with no fixed
+  // target/stop). null falls back to MFE (win) / MAE (loss).
+  resultPoints: number | null;
   recoveryStage: RecoveryStage; // parsed from the spreadsheet's recovery col
   // Placeholder for an upcoming recovery — user reserves a row before the
   // trade fires. Combined with recoveryStage to indicate R1 vs R2 pending.
@@ -60,6 +64,11 @@ export interface BacktestDataset {
   brickPoints: number;   // points per brick; 20 for this dataset
   stopBricks: number;    // 8 = 160 points
   takeProfitBricks: number; // 2 = 40 points
+  // "fixed" → TP/SL is the brick value above. "fluid" → no set target/stop;
+  // the effective TP/SL is the average of realized points on winning / losing
+  // trades (exit-on-next-signal strategies).
+  tpMode: "fixed" | "fluid";
+  slMode: "fixed" | "fluid";
   // Optional starting balances for each scaling. When set, the Scaling tab
   // walks trades from this base, applying each trade's pnl. null = the
   // scaling isn't being tracked for this dataset.

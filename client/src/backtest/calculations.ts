@@ -32,8 +32,10 @@ export interface CoreSummary {
   // fixed ratio. tpPoints/slPoints/rewardRisk are surfaced so the UI can
   // label the card with the actual R:R.
   profitFactor: number;
-  tpPoints: number;
-  slPoints: number;
+  tpPoints: number; // effective TP — brick value (fixed) or avg winner (fluid)
+  slPoints: number; // effective SL — brick value (fixed) or avg loser (fluid)
+  tpFluid: boolean; // TP derived from average realized winner points
+  slFluid: boolean; // SL derived from average realized loser points
   rewardRisk: number; // TP ÷ stop, e.g. 1.25 for 200/160
   // Kelly criterion — the bankroll fraction that maximizes long-run growth for
   // this win rate and payoff:
@@ -84,12 +86,32 @@ export function computeCoreSummary(ds: BacktestDataset): CoreSummary {
   const loserMfes = nonNull(losses.map((t) => t.mfe));
   const loserMaes = nonNull(losses.map((t) => t.mae));
 
-  // Profit factor from the dataset's TP/stop distances (points).
-  const tpPoints = ds.takeProfitBricks * ds.brickPoints;
-  const slPoints = ds.stopBricks * ds.brickPoints;
+  // Profit factor / reward:risk. In "fixed" mode TP and SL are the dataset's
+  // brick distances. In "fluid" mode (exit-on-signal strategies with no set
+  // target/stop) the effective TP is the average realized points on winners and
+  // SL the average on losers — realized points per trade come from
+  // `resultPoints`, falling back to MFE (win) / MAE (loss).
+  const tpFluid = ds.tpMode === "fluid";
+  const slFluid = ds.slMode === "fluid";
+  const realized = (t: BacktestTrade, isWin: boolean): number | null => {
+    const v = t.resultPoints ?? (isWin ? t.mfe : t.mae);
+    return v == null ? null : Math.abs(v);
+  };
+  const winPts = nonNull(wins.map((t) => realized(t, true)));
+  const lossPts = nonNull(losses.map((t) => realized(t, false)));
+  const fixedTp = ds.takeProfitBricks * ds.brickPoints;
+  const fixedSl = ds.stopBricks * ds.brickPoints;
+  // Effective per-trade TP/SL used for R:R, Kelly and the card label.
+  const tpPoints = tpFluid ? (winPts.length ? mean(winPts) : 0) : fixedTp;
+  const slPoints = slFluid ? (lossPts.length ? mean(lossPts) : 0) : fixedSl;
   const rewardRisk = slPoints > 0 ? tpPoints / slPoints : 0;
-  const grossWin = wins.length * tpPoints;
-  const grossLoss = losses.length * slPoints;
+  // Gross win/loss: sum actual realized points when fluid, else count × fixed.
+  const grossWin = tpFluid
+    ? winPts.reduce((s, v) => s + v, 0)
+    : wins.length * fixedTp;
+  const grossLoss = slFluid
+    ? lossPts.reduce((s, v) => s + v, 0)
+    : losses.length * fixedSl;
   const profitFactor =
     grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? Infinity : 0;
 
@@ -133,6 +155,8 @@ export function computeCoreSummary(ds: BacktestDataset): CoreSummary {
     profitFactor,
     tpPoints,
     slPoints,
+    tpFluid,
+    slFluid,
     rewardRisk,
     kelly,
     halfKelly: kelly / 2,

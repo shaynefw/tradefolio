@@ -603,6 +603,8 @@ export default function Backtest() {
             stopBricks={activeMeta.stopBricks}
             brickPoints={activeMeta.brickPoints}
             takeProfitBricks={activeMeta.takeProfitBricks}
+            tpMode={(activeMeta as { tpMode?: "fixed" | "fluid" }).tpMode ?? "fixed"}
+            slMode={(activeMeta as { slMode?: "fixed" | "fluid" }).slMode ?? "fixed"}
             shareToken={(activeMeta as { shareToken?: string | null }).shareToken ?? null}
             initial={{
               premiumStartBalance: activeMeta.premiumStartBalance ?? null,
@@ -762,6 +764,35 @@ function defaultLadder(stopBricks: number, brickPoints: number): RrRow[] {
   }));
 }
 
+// Small segmented control for a fixed/fluid TP or SL mode.
+function FixedFluidToggle({
+  value,
+  onChange,
+}: {
+  value: "fixed" | "fluid";
+  onChange: (v: "fixed" | "fluid") => void;
+}) {
+  return (
+    <div className="inline-flex overflow-hidden rounded border border-border text-[10px]">
+      {(["fixed", "fluid"] as const).map((m) => (
+        <button
+          key={m}
+          type="button"
+          onClick={() => onChange(m)}
+          className={cn(
+            "px-1.5 py-0.5 font-medium uppercase tracking-wide transition-colors",
+            value === m
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {m}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function DatasetSettingsDialog({
   open,
   onOpenChange,
@@ -769,6 +800,8 @@ function DatasetSettingsDialog({
   stopBricks,
   brickPoints,
   takeProfitBricks,
+  tpMode: tpModeProp,
+  slMode: slModeProp,
   shareToken,
   initial,
 }: {
@@ -778,6 +811,8 @@ function DatasetSettingsDialog({
   stopBricks: number;
   brickPoints: number;
   takeProfitBricks: number;
+  tpMode: "fixed" | "fluid";
+  slMode: "fixed" | "fluid";
   shareToken: string | null;
   initial: DatasetSettingsInitial;
 }) {
@@ -792,6 +827,8 @@ function DatasetSettingsDialog({
   const [brickPts, setBrickPts] = useState("");
   const [tpPts, setTpPts] = useState("");
   const [slPts, setSlPts] = useState("");
+  const [tpMode, setTpMode] = useState<"fixed" | "fluid">("fixed");
+  const [slMode, setSlMode] = useState<"fixed" | "fluid">("fixed");
 
   // Re-sync when opened (or the underlying dataset switches).
   useEffect(() => {
@@ -816,6 +853,8 @@ function DatasetSettingsDialog({
     setBrickPts(String(brickPoints));
     setTpPts(String(takeProfitBricks * brickPoints));
     setSlPts(String(stopBricks * brickPoints));
+    setTpMode(tpModeProp);
+    setSlMode(slModeProp);
   }, [
     open,
     initial.premiumStartBalance,
@@ -827,6 +866,8 @@ function DatasetSettingsDialog({
     stopBricks,
     brickPoints,
     takeProfitBricks,
+    tpModeProp,
+    slModeProp,
   ]);
 
   const mutation = trpc.backtest.dataset.update.useMutation({
@@ -946,6 +987,8 @@ function DatasetSettingsDialog({
       brickPoints: bp,
       takeProfitBricks: tpB,
       stopBricks: slB,
+      tpMode,
+      slMode,
       premiumStartBalance: parseDollar(premium),
       speedStartBalance: parseDollar(speed),
       notes: notes.trim() === "" ? null : notes.trim(),
@@ -986,22 +1029,44 @@ function DatasetSettingsDialog({
               Strategy — take profit / stop
             </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-xs text-muted-foreground">Take profit (pts)</span>
-                <input
-                  type="number" step="any" min={1} value={tpPts}
-                  onChange={(e) => setTpPts(e.target.value)}
-                  className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-xs text-muted-foreground">Stop loss (pts)</span>
-                <input
-                  type="number" step="any" min={1} value={slPts}
-                  onChange={(e) => setSlPts(e.target.value)}
-                  className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-              </label>
+              {/* Take profit */}
+              <div className="flex flex-col gap-1 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Take profit</span>
+                  <FixedFluidToggle value={tpMode} onChange={setTpMode} />
+                </div>
+                {tpMode === "fixed" ? (
+                  <input
+                    type="number" step="any" min={1} value={tpPts}
+                    onChange={(e) => setTpPts(e.target.value)}
+                    placeholder="points"
+                    className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                ) : (
+                  <div className="flex h-9 items-center rounded-md border border-dashed border-border bg-background/40 px-3 text-xs text-muted-foreground">
+                    avg of winners
+                  </div>
+                )}
+              </div>
+              {/* Stop loss */}
+              <div className="flex flex-col gap-1 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Stop loss</span>
+                  <FixedFluidToggle value={slMode} onChange={setSlMode} />
+                </div>
+                {slMode === "fixed" ? (
+                  <input
+                    type="number" step="any" min={1} value={slPts}
+                    onChange={(e) => setSlPts(e.target.value)}
+                    placeholder="points"
+                    className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground [color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                ) : (
+                  <div className="flex h-9 items-center rounded-md border border-dashed border-border bg-background/40 px-3 text-xs text-muted-foreground">
+                    avg of losers
+                  </div>
+                )}
+              </div>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="text-xs text-muted-foreground">Brick size (pts)</span>
                 <input
@@ -1012,13 +1077,24 @@ function DatasetSettingsDialog({
               </label>
             </div>
             <p className="text-xs text-muted-foreground">
-              Reward:risk ={" "}
-              <span className="font-medium text-foreground">
-                {Number(slPts) > 0
-                  ? `1:${(Number(tpPts) / Number(slPts)).toFixed(2).replace(/\.?0+$/, "")}`
-                  : "—"}
-              </span>
-              . Drives the Profit Factor card. Rounded to the nearest brick on save.
+              {tpMode === "fixed" && slMode === "fixed" ? (
+                <>
+                  Reward:risk ={" "}
+                  <span className="font-medium text-foreground">
+                    {Number(slPts) > 0
+                      ? `1:${(Number(tpPts) / Number(slPts)).toFixed(2).replace(/\.?0+$/, "")}`
+                      : "—"}
+                  </span>
+                  . Drives the Profit Factor card. Rounded to the nearest brick on save.
+                </>
+              ) : (
+                <>
+                  <span className="font-medium text-foreground">Fluid</span> sides
+                  take their average from the realized points of your logged
+                  trades, so reward:risk builds up as you add trades. Log each
+                  trade's <span className="font-medium text-foreground">Result (pts)</span>.
+                </>
+              )}
             </p>
           </section>
 
@@ -1687,7 +1763,11 @@ export function OverviewTab({
               {core.profitFactor === Infinity ? "∞" : core.profitFactor.toFixed(2)}
             </span>
           }
-          sub={`TP ${core.tpPoints} / SL ${core.slPoints} pts`}
+          sub={
+            `TP ${core.tpFluid ? "~" : ""}${Math.round(core.tpPoints)}` +
+            ` / SL ${core.slFluid ? "~" : ""}${Math.round(core.slPoints)} pts` +
+            (core.tpFluid || core.slFluid ? " · avg (fluid)" : "")
+          }
         />
         <StatCard
           label="Kelly"
@@ -3218,6 +3298,8 @@ function TradeLogTab({
           existingTrades={dataset.trades}
           premiumSchedule={dataset.premiumScalingSchedule}
           speedSchedule={dataset.speedScalingSchedule}
+          tpMode={dataset.tpMode}
+          slMode={dataset.slMode}
           datasetId={datasetId}
           editingTrade={editingTrade}
         />

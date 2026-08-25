@@ -37,6 +37,7 @@ interface FormState {
   outcome: Outcome | "";
   mae: string;
   mfe: string;
+  resultPoints: string;
   recoveryStage: RecoveryStage;
   premiumPnl: string;
   premiumLabel: string;
@@ -74,6 +75,7 @@ const EMPTY_FORM: FormState = {
   outcome: "",
   mae: "",
   mfe: "",
+  resultPoints: "",
   recoveryStage: "none",
   premiumPnl: "",
   premiumLabel: "",
@@ -96,6 +98,7 @@ function tradeToForm(t: BacktestTrade): FormState {
     outcome: t.outcome ?? "",
     mae: t.mae == null ? "" : String(t.mae),
     mfe: t.mfe == null ? "" : String(t.mfe),
+    resultPoints: t.resultPoints == null ? "" : String(t.resultPoints),
     recoveryStage: t.recoveryStage,
     premiumPnl: t.premium?.pnl == null ? "" : String(t.premium.pnl),
     premiumLabel: t.premium?.label ?? "",
@@ -153,6 +156,10 @@ interface TradeFormModalProps {
   // from the level whose recommendedBalance ≤ current running balance.
   premiumSchedule: ScalingSchedule | null;
   speedSchedule: ScalingSchedule | null;
+  // TP/SL modes — when either is "fluid", show the Result (pts) field so the
+  // realized points per trade feed the average TP/SL.
+  tpMode?: "fixed" | "fluid";
+  slMode?: "fixed" | "fluid";
 }
 
 export function TradeFormModal({
@@ -165,7 +172,10 @@ export function TradeFormModal({
   existingTrades,
   premiumSchedule,
   speedSchedule,
+  tpMode = "fixed",
+  slMode = "fixed",
 }: TradeFormModalProps) {
+  const showResult = tpMode === "fluid" || slMode === "fluid";
   const isEdit = editingTrade?.id != null;
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -333,6 +343,7 @@ export function TradeFormModal({
           outcome: null,
           mae: null,
           mfe: null,
+          resultPoints: null,
           recoveryStage: (form.pendingStage === "regular"
             ? "none"
             : form.pendingStage) as RecoveryStage,
@@ -357,6 +368,7 @@ export function TradeFormModal({
           outcome: (form.outcome || null) as Outcome | null,
           mae: num(form.mae),
           mfe: num(form.mfe),
+          resultPoints: num(form.resultPoints),
           recoveryStage: form.recoveryStage,
           premiumPnl: num(form.premiumPnl),
           premiumBalance: null, // auto-computed from start + Σ pnl
@@ -552,6 +564,46 @@ export function TradeFormModal({
               />
             </Field>
           </div>
+
+          {/* Result (pts) — only for fluid TP/SL datasets. Blank falls back to
+              MFE (win) / MAE (loss) in the stats, so the placeholder shows that
+              auto value; type to override. */}
+          {showResult && (() => {
+            const autoSrc =
+              form.outcome === "Took Profit"
+                ? form.mfe
+                : form.outcome === "Took Loss"
+                  ? form.mae
+                  : "";
+            const autoLabel =
+              form.outcome === "Took Profit"
+                ? "MFE"
+                : form.outcome === "Took Loss"
+                  ? "MAE"
+                  : "";
+            return (
+              <Field label="Result (points captured / lost at exit)">
+                <input
+                  type="number"
+                  step="any"
+                  placeholder={
+                    autoSrc !== ""
+                      ? `auto: ${autoSrc} (${autoLabel})`
+                      : "points at exit"
+                  }
+                  value={form.resultPoints}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, resultPoints: e.target.value }))
+                  }
+                  className={inputClass}
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Feeds the fluid TP/SL average. Blank uses{" "}
+                  {autoLabel ? `this trade's ${autoLabel}` : "MFE (win) / MAE (loss)"}.
+                </p>
+              </Field>
+            );
+          })()}
 
           {/* Notes */}
           <Field label="Notes">

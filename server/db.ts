@@ -216,6 +216,17 @@ export async function initDb() {
     "withdrawal_fee",
     "REAL NOT NULL DEFAULT 0",
   );
+  await addColumnIfMissing(
+    "backtest_datasets",
+    "tp_mode",
+    "TEXT NOT NULL DEFAULT 'fixed'",
+  );
+  await addColumnIfMissing(
+    "backtest_datasets",
+    "sl_mode",
+    "TEXT NOT NULL DEFAULT 'fixed'",
+  );
+  await addColumnIfMissing("backtest_trades", "result_points", "REAL");
   await migrateOutcomeAllowBreakeven();
 }
 

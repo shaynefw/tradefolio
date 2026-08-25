@@ -32,6 +32,7 @@ export interface SeedTradeInput {
   outcome: "Took Profit" | "Took Loss" | "Breakeven" | null;
   mae: number | null;
   mfe: number | null;
+  resultPoints?: number | null;
   recoveryStage: RecoveryStage;
   premiumPnl: number | null;
   premiumBalance: number | null;
@@ -101,6 +102,8 @@ export interface ServerDatasetMeta {
   brickPoints: number;
   stopBricks: number;
   takeProfitBricks: number;
+  tpMode?: "fixed" | "fluid" | null;
+  slMode?: "fixed" | "fluid" | null;
   premiumStartBalance: number | null;
   speedStartBalance: number | null;
   notes: string | null;
@@ -122,6 +125,7 @@ export interface ServerTradeRow {
   outcome: "Took Profit" | "Took Loss" | "Breakeven" | null;
   mae: number | null;
   mfe: number | null;
+  resultPoints?: number | null;
   recoveryStage: RecoveryStage;
   premiumPnl: number | null;
   premiumBalance: number | null;
@@ -165,6 +169,7 @@ export function serverRowToBacktestTrade(
     outcome: row.outcome,
     mae: row.mae,
     mfe: row.mfe,
+    resultPoints: row.resultPoints ?? null,
     recoveryStage: row.recoveryStage,
     premium:
       // Even with no stored balance, a non-zero pnl still belongs to a
@@ -267,6 +272,8 @@ export function buildDatasetFromServer(
     brickPoints: meta.brickPoints,
     stopBricks: meta.stopBricks,
     takeProfitBricks: meta.takeProfitBricks,
+    tpMode: meta.tpMode ?? "fixed",
+    slMode: meta.slMode ?? "fixed",
     premiumStartBalance: meta.premiumStartBalance,
     speedStartBalance: meta.speedStartBalance,
     notes: meta.notes,
