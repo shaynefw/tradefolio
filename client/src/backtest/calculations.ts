@@ -252,6 +252,66 @@ export function computeByHour(ds: BacktestDataset): HourBucket[] {
 }
 
 // ---------------------------------------------------------------------------
+// By weekday (Mon–Sun). Always returns all seven days (0 = Monday … 6 =
+// Sunday) so the chart/table is stable; Sat/Sun included for crypto. EV uses
+// the effective TP/SL (fixed brick value, or the fluid average) so it stays
+// meaningful for both strategy types.
+// ---------------------------------------------------------------------------
+
+export interface WeekdayBucket {
+  weekday: number;   // 0 = Monday … 6 = Sunday
+  label: string;     // "Mon"
+  trades: number;    // decisive trades
+  wins: number;
+  losses: number;
+  winRate: number;
+  netPoints: number; // Σ realized points (win +, loss −), using effective TP/SL
+  evPoints: number;  // netPoints / trades
+}
+
+const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+export function computeByWeekday(ds: BacktestDataset): WeekdayBucket[] {
+  const { stopPoints: effSl, fluid: slFluid } = effectiveStopPoints(ds);
+  const fixedTp = ds.takeProfitBricks * ds.brickPoints;
+  const tpFluid = ds.tpMode === "fluid";
+
+  const buckets: WeekdayBucket[] = WEEKDAY_LABELS.map((label, i) => ({
+    weekday: i,
+    label,
+    trades: 0,
+    wins: 0,
+    losses: 0,
+    winRate: 0,
+    netPoints: 0,
+    evPoints: 0,
+  }));
+
+  for (const t of ds.trades) {
+    if (!t.validEntry || !isDecisive(t)) continue;
+    // getDay(): 0 = Sunday … 6 = Saturday → remap to Mon=0 … Sun=6.
+    const jsDay = t.date.getDay();
+    const idx = (jsDay + 6) % 7;
+    const b = buckets[idx];
+    b.trades++;
+    if (t.outcome === "Took Profit") {
+      b.wins++;
+      const pts = tpFluid ? Math.abs(t.resultPoints ?? t.mfe ?? 0) : fixedTp;
+      b.netPoints += pts;
+    } else {
+      b.losses++;
+      const pts = slFluid ? Math.abs(t.resultPoints ?? t.mae ?? 0) : effSl;
+      b.netPoints -= pts;
+    }
+  }
+  for (const b of buckets) {
+    b.winRate = b.trades > 0 ? b.wins / b.trades : 0;
+    b.evPoints = b.trades > 0 ? b.netPoints / b.trades : 0;
+  }
+  return buckets;
+}
+
+// ---------------------------------------------------------------------------
 // By trade number (T1..Tn) — intraday sequence position.
 // ---------------------------------------------------------------------------
 

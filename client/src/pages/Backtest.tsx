@@ -6,6 +6,7 @@ import {
   ArrowUp,
   BarChart2,
   Clock,
+  CalendarDays,
   Database,
   Download,
   FlaskConical,
@@ -71,6 +72,7 @@ import {
 import { Pencil, StickyNote, Trash2 } from "lucide-react";
 import {
   computeByHour,
+  computeByWeekday,
   computeBySide,
   computeByTradeNo,
   computeCoreSummary,
@@ -241,6 +243,7 @@ export default function Backtest() {
     [ds],
   );
   const byHour = useMemo(() => (ds ? computeByHour(ds) : []), [ds]);
+  const byWeekday = useMemo(() => (ds ? computeByWeekday(ds) : []), [ds]);
   const byTradeNo = useMemo(() => (ds ? computeByTradeNo(ds) : []), [ds]);
   const bySide = useMemo(() => (ds ? computeBySide(ds) : []), [ds]);
   const rr = useMemo(() => (ds ? computeRrBuckets(ds) : []), [ds]);
@@ -640,6 +643,7 @@ export default function Backtest() {
             <TabsContent value="timing" className="space-y-6 mt-6">
               <TimingTab
                 byHour={byHour}
+                byWeekday={byWeekday}
                 byTradeNo={byTradeNo}
                 bySide={bySide}
                 rr={rr}
@@ -2056,6 +2060,7 @@ function ScalingSummary({
 
 export function TimingTab({
   byHour,
+  byWeekday,
   byTradeNo,
   bySide,
   rr,
@@ -2064,6 +2069,7 @@ export function TimingTab({
   stopPoints,
 }: {
   byHour: ReturnType<typeof computeByHour>;
+  byWeekday: ReturnType<typeof computeByWeekday>;
   byTradeNo: ReturnType<typeof computeByTradeNo>;
   bySide: ReturnType<typeof computeBySide>;
   rr: ReturnType<typeof computeRrBuckets>;
@@ -2077,6 +2083,18 @@ export function TimingTab({
     winRate: Number((b.winRate * 100).toFixed(1)),
     trades: b.trades,
   }));
+
+  // Weekday chart data — keep only days that actually have trades so an
+  // index-only intraday strategy doesn't show five empty weekend-inclusive
+  // columns, but always keep the natural Mon→Sun order.
+  const weekdayData = byWeekday
+    .filter((b) => b.trades > 0)
+    .map((b) => ({
+      day: b.label,
+      winRate: Number((b.winRate * 100).toFixed(1)),
+      trades: b.trades,
+      ev: Number(b.evPoints.toFixed(1)),
+    }));
 
   const tradeNoData = byTradeNo.map((b) => ({
     label: b.label,
@@ -2144,6 +2162,102 @@ export function TimingTab({
                 </div>
               ))}
             </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Weekday */}
+      <section className="space-y-3">
+        <SectionHeader
+          icon={CalendarDays}
+          title="Performance by day of week"
+          hint="Mon–Sun (weekends shown for crypto). Bar opacity reflects sample size; EV is points per trade using this dataset's TP/SL."
+        />
+        <Card className="bg-card/60">
+          <CardContent className="pt-4">
+            {weekdayData.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No decisive trades yet.
+              </p>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={weekdayData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="day" tick={{ fontSize: 12, fill: "#6b7280" }} tickLine={false} axisLine={false} />
+                    <YAxis
+                      tickFormatter={(v) => `${v}%`}
+                      tick={{ fontSize: 11, fill: "#6b7280" }}
+                      tickLine={false}
+                      axisLine={false}
+                      width={42}
+                      domain={[0, 100]}
+                    />
+                    <RechartsTooltip
+                      cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                      content={({ active, payload, label }) =>
+                        active && payload && payload.length ? (
+                          <div className="rounded-lg border border-border bg-zinc-900 px-3 py-2 shadow-xl text-sm">
+                            <p className="text-muted-foreground mb-1">{label}</p>
+                            <p className="font-semibold text-foreground">
+                              <span className="text-muted-foreground mr-2">Win rate:</span>
+                              {`${payload[0].value}%`}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {(payload[0].payload as { trades?: number })?.trades} trades ·
+                              EV {(payload[0].payload as { ev?: number })?.ev} pts
+                            </p>
+                          </div>
+                        ) : null
+                      }
+                    />
+                    <Bar dataKey="winRate" name="Win Rate" radius={[3, 3, 0, 0]} maxBarSize={56} isAnimationActive={false}>
+                      {weekdayData.map((d, i) => (
+                        <Cell
+                          key={i}
+                          fill={d.winRate >= 80 ? "#22c55e" : d.winRate >= 65 ? "#a3e635" : "#ef4444"}
+                          fillOpacity={opacityForCount(d.trades)}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                <div className="mt-3 overflow-x-auto rounded-md border border-border">
+                  <table className="w-full min-w-[26rem] text-sm">
+                    <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2 text-left">Day</th>
+                        <th className="px-3 py-2 text-right">Trades</th>
+                        <th className="px-3 py-2 text-right">W / L</th>
+                        <th className="px-3 py-2 text-right">Win rate</th>
+                        <th className="px-3 py-2 text-right">EV (pts)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {byWeekday
+                        .filter((b) => b.trades > 0)
+                        .map((b) => (
+                          <tr key={b.weekday} className="border-t border-border/40">
+                            <td className="px-3 py-2 font-medium">{b.label}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{b.trades}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              <span className="text-green-400">{b.wins}</span>
+                              <span className="text-muted-foreground"> / </span>
+                              <span className="text-red-400">{b.losses}</span>
+                            </td>
+                            <td className={cn("px-3 py-2 text-right tabular-nums font-semibold", b.winRate >= 0.5 ? "text-green-400" : "text-red-400")}>
+                              {fmtPct(b.winRate)}
+                            </td>
+                            <td className={cn("px-3 py-2 text-right tabular-nums font-semibold", b.evPoints >= 0 ? "text-green-400" : "text-red-400")}>
+                              {b.evPoints >= 0 ? "+" : ""}{b.evPoints.toFixed(1)}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </section>

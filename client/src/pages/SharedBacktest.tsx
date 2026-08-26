@@ -11,6 +11,7 @@ import {
 } from "../backtest/dataSource";
 import {
   computeByHour,
+  computeByWeekday,
   computeBySide,
   computeByTradeNo,
   computeCoreSummary,
@@ -42,6 +43,7 @@ export default function SharedBacktest() {
 
   const core = useMemo(() => (ds ? computeCoreSummary(ds) : null), [ds]);
   const byHour = useMemo(() => (ds ? computeByHour(ds) : []), [ds]);
+  const byWeekday = useMemo(() => (ds ? computeByWeekday(ds) : []), [ds]);
   const byTradeNo = useMemo(() => (ds ? computeByTradeNo(ds) : []), [ds]);
   const bySide = useMemo(() => (ds ? computeBySide(ds) : []), [ds]);
   const rr = useMemo(() => (ds ? computeRrBuckets(ds) : []), [ds]);
@@ -136,6 +138,7 @@ export default function SharedBacktest() {
               <TabsContent value="timing" className="space-y-6 mt-6">
                 <TimingTab
                   byHour={byHour}
+                  byWeekday={byWeekday}
                   byTradeNo={byTradeNo}
                   bySide={bySide}
                   rr={rr}
