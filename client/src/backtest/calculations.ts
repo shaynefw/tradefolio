@@ -27,6 +27,13 @@ export interface CoreSummary {
   minLossStreak: number;
   avgLossStreak: number;
   lossStreakCount: number;
+  // Odds of the LONGEST streak of each type. inSample = P(a run this long
+  // occurs somewhere in the decisive-trade sample); perAttempt = raw chance of
+  // that many in a row from a fresh start (winRate^length). Independence-based.
+  winStreakOddsInSample: number;
+  winStreakOddsPerAttempt: number;
+  lossStreakOddsInSample: number;
+  lossStreakOddsPerAttempt: number;
   avgMfeWinners: number;
   avgMaeWinners: number;
   avgMfeLosers: number;
@@ -139,6 +146,16 @@ export function computeCoreSummary(ds: BacktestDataset): CoreSummary {
     decisive > 0 && rewardRisk > 0 ? p - (1 - p) / rewardRisk : 0;
   const kelly = Math.max(0, rawKelly);
 
+  // Streak odds, keyed to the longest streak of each type, over `decisive`
+  // trades at win rate p (loss rate 1−p). Independence assumed.
+  const q = 1 - p;
+  const winStreakOddsInSample = runOccurrenceProb(decisive, p, streaks.maxWin);
+  const winStreakOddsPerAttempt =
+    streaks.maxWin > 0 ? Math.pow(p, streaks.maxWin) : 0;
+  const lossStreakOddsInSample = runOccurrenceProb(decisive, q, streaks.maxLoss);
+  const lossStreakOddsPerAttempt =
+    streaks.maxLoss > 0 ? Math.pow(q, streaks.maxLoss) : 0;
+
   return {
     totalRows: ds.trades.length,
     validTrades: validTrades.length,
@@ -158,6 +175,10 @@ export function computeCoreSummary(ds: BacktestDataset): CoreSummary {
     minLossStreak: streaks.minLoss,
     avgLossStreak: streaks.avgLoss,
     lossStreakCount: streaks.lossStreaks,
+    winStreakOddsInSample,
+    winStreakOddsPerAttempt,
+    lossStreakOddsInSample,
+    lossStreakOddsPerAttempt,
     avgMfeWinners: Math.round(mean(winnerMfes)),
     avgMaeWinners: Math.round(mean(winnerMaes)),
     avgMfeLosers: Math.round(mean(loserMfes)),
@@ -241,6 +262,39 @@ export function computeStreaks(trades: BacktestTrade[]): StreakResult {
     avgLoss: l.avg,
     lossStreaks: l.n,
   };
+}
+
+// Probability that at least one run of `length` consecutive successes occurs
+// within `n` independent Bernoulli(prob) trials. Exact via a small DP over the
+// current trailing-run length. Used to gauge whether an observed streak is
+// normal for the sample size and win rate. Assumes independent trades.
+export function runOccurrenceProb(
+  n: number,
+  prob: number,
+  length: number,
+): number {
+  if (length <= 0 || n < length) return 0;
+  if (prob <= 0) return 0;
+  if (prob >= 1) return 1;
+  // states[j] = prob of currently sitting on a trailing run of j successes
+  // (0 ≤ j < length) without ever having hit `length`; `hit` accumulates the
+  // probability that a full run has already occurred.
+  const states = new Array<number>(length).fill(0);
+  states[0] = 1;
+  let hit = 0;
+  for (let i = 0; i < n; i++) {
+    const next = new Array<number>(length).fill(0);
+    let failMass = 0;
+    for (let j = 0; j < length; j++) failMass += states[j] * (1 - prob);
+    next[0] += failMass;
+    for (let j = 0; j < length; j++) {
+      const succ = states[j] * prob;
+      if (j + 1 < length) next[j + 1] += succ;
+      else hit += succ;
+    }
+    for (let j = 0; j < length; j++) states[j] = next[j];
+  }
+  return hit;
 }
 
 // ---------------------------------------------------------------------------
