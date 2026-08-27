@@ -2031,14 +2031,14 @@ export function OverviewTab({
               <tbody>
                 <tr className="border-t border-border/40">
                   <td className="px-3 py-2 font-medium text-green-400 align-top">Winning</td>
-                  <StreakCell count={core.maxWinStreak} inSample={core.winStreakOddsInSample} perAttempt={core.winStreakOddsPerAttempt} primary="inSample" />
+                  <StreakCell count={core.maxWinStreak} inSample={core.winStreakOddsInSample} perAttempt={core.winStreakOddsPerAttempt} primary="perAttempt" />
                   <StreakCell count={core.avgWinStreak.toFixed(1)} lenForTip={core.avgWinStreak} inSample={core.winAvgStreakOddsInSample} perAttempt={core.winAvgStreakOddsPerAttempt} primary="perAttempt" />
                   <td className="px-3 py-2 text-right tabular-nums align-top">{core.minWinStreak}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground align-top">{core.winStreakCount}</td>
                 </tr>
                 <tr className="border-t border-border/40">
                   <td className="px-3 py-2 font-medium text-red-400 align-top">Losing</td>
-                  <StreakCell count={core.maxLossStreak} inSample={core.lossStreakOddsInSample} perAttempt={core.lossStreakOddsPerAttempt} primary="inSample" />
+                  <StreakCell count={core.maxLossStreak} inSample={core.lossStreakOddsInSample} perAttempt={core.lossStreakOddsPerAttempt} primary="perAttempt" />
                   <StreakCell count={core.avgLossStreak.toFixed(1)} lenForTip={core.avgLossStreak} inSample={core.lossAvgStreakOddsInSample} perAttempt={core.lossAvgStreakOddsPerAttempt} primary="perAttempt" />
                   <td className="px-3 py-2 text-right tabular-nums align-top">{core.minLossStreak}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground align-top">{core.lossStreakCount}</td>
@@ -2048,14 +2048,13 @@ export function OverviewTab({
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             A run is a consecutive string of the same outcome; a lone win or loss
-            counts as a streak of 1. Breakevens don't break a run. Under{" "}
-            <span className="text-foreground/70">Longest</span>: the chance a run
-            that long appears somewhere in your {core.wins + core.losses} decisive
-            trades. Under <span className="text-foreground/70">Average</span>: the
-            back-to-back chance of an average-length run from a fresh start (the
-            in-sample chance is near-certain for short runs, so it's on hover
-            instead). Assumes independent trades — strategies whose outcomes
-            cluster will differ.
+            counts as a streak of 1. Breakevens don't break a run. The small %
+            under Longest and Average is the{" "}
+            <span className="text-foreground/70">back-to-back</span> chance of a
+            run that long from a fresh start at this win rate, so a shorter
+            streak reads as more likely. Hover for the chance it appears
+            somewhere in your {core.wins + core.losses} decisive trades. Assumes
+            independent trades — strategies whose outcomes cluster will differ.
           </p>
         </CardContent>
       </Card>
