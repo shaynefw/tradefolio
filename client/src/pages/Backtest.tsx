@@ -154,7 +154,36 @@ function perAttemptLabel(length: number, perAttempt: number): string {
   const pct = perAttempt * 100;
   const one = Math.round(1 / perAttempt);
   const pctStr = pct < 0.1 ? pct.toPrecision(2) : pct.toFixed(2);
-  return `Back-to-back: ${length} in a row = ${pctStr}% (~1 in ${one.toLocaleString()})`;
+  const lenStr = Number.isInteger(length) ? String(length) : length.toFixed(1);
+  return `Back-to-back: ${lenStr} in a row = ${pctStr}% (~1 in ${one.toLocaleString()})`;
+}
+
+// A streak-metric cell: the count on top, its in-sample odds as small subtext,
+// with the raw back-to-back odds on hover. `lenForTip` overrides the length
+// used in the tooltip (for the fractional average).
+function StreakCell({
+  count,
+  inSample,
+  perAttempt,
+  lenForTip,
+}: {
+  count: number | string;
+  inSample: number;
+  perAttempt: number;
+  lenForTip?: number;
+}) {
+  const len = lenForTip ?? (typeof count === "number" ? count : 0);
+  return (
+    <td
+      className="px-3 py-2 text-right align-top tabular-nums"
+      title={perAttemptLabel(len, perAttempt)}
+    >
+      <div className="font-semibold">{count}</div>
+      <div className="text-[10px] font-normal text-muted-foreground">
+        {oddsLabel(len, inSample)}
+      </div>
+    </td>
+  );
 }
 
 // Sample-size opacity ramp for the timing charts. Buckets with very few
@@ -1965,7 +1994,7 @@ export function OverviewTab({
         <CardContent className="pt-5 pb-5">
           <h3 className="mb-3 text-sm font-semibold">Streak breakdown</h3>
           <div className="overflow-x-auto rounded-md border border-border">
-            <table className="w-full min-w-[26rem] text-sm">
+            <table className="w-full min-w-[30rem] text-sm">
               <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2 text-left">Streak</th>
@@ -1973,52 +2002,33 @@ export function OverviewTab({
                   <th className="px-3 py-2 text-right">Average</th>
                   <th className="px-3 py-2 text-right">Shortest</th>
                   <th className="px-3 py-2 text-right"># of runs</th>
-                  <th
-                    className="px-3 py-2 text-right"
-                    title="Chance a run at least as long as your longest shows up somewhere in this sample, at your win rate. Low % = the streak was unusual."
-                  >
-                    Odds of longest
-                  </th>
                 </tr>
               </thead>
               <tbody>
                 <tr className="border-t border-border/40">
-                  <td className="px-3 py-2 font-medium text-green-400">Winning</td>
-                  <td className="px-3 py-2 text-right tabular-nums font-semibold">{core.maxWinStreak}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{core.avgWinStreak.toFixed(1)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{core.minWinStreak}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{core.winStreakCount}</td>
-                  <td
-                    className="px-3 py-2 text-right tabular-nums"
-                    title={perAttemptLabel(core.maxWinStreak, core.winStreakOddsPerAttempt)}
-                  >
-                    {oddsLabel(core.maxWinStreak, core.winStreakOddsInSample)}
-                  </td>
+                  <td className="px-3 py-2 font-medium text-green-400 align-top">Winning</td>
+                  <StreakCell count={core.maxWinStreak} inSample={core.winStreakOddsInSample} perAttempt={core.winStreakOddsPerAttempt} />
+                  <StreakCell count={core.avgWinStreak.toFixed(1)} lenForTip={core.avgWinStreak} inSample={core.winAvgStreakOddsInSample} perAttempt={core.winAvgStreakOddsPerAttempt} />
+                  <td className="px-3 py-2 text-right tabular-nums align-top">{core.minWinStreak}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground align-top">{core.winStreakCount}</td>
                 </tr>
                 <tr className="border-t border-border/40">
-                  <td className="px-3 py-2 font-medium text-red-400">Losing</td>
-                  <td className="px-3 py-2 text-right tabular-nums font-semibold">{core.maxLossStreak}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{core.avgLossStreak.toFixed(1)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{core.minLossStreak}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{core.lossStreakCount}</td>
-                  <td
-                    className="px-3 py-2 text-right tabular-nums"
-                    title={perAttemptLabel(core.maxLossStreak, core.lossStreakOddsPerAttempt)}
-                  >
-                    {oddsLabel(core.maxLossStreak, core.lossStreakOddsInSample)}
-                  </td>
+                  <td className="px-3 py-2 font-medium text-red-400 align-top">Losing</td>
+                  <StreakCell count={core.maxLossStreak} inSample={core.lossStreakOddsInSample} perAttempt={core.lossStreakOddsPerAttempt} />
+                  <StreakCell count={core.avgLossStreak.toFixed(1)} lenForTip={core.avgLossStreak} inSample={core.lossAvgStreakOddsInSample} perAttempt={core.lossAvgStreakOddsPerAttempt} />
+                  <td className="px-3 py-2 text-right tabular-nums align-top">{core.minLossStreak}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground align-top">{core.lossStreakCount}</td>
                 </tr>
               </tbody>
             </table>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             A run is a consecutive string of the same outcome; a lone win or loss
-            counts as a streak of 1. Breakevens don't break a run.{" "}
-            <span className="text-foreground/70">Odds of longest</span> = the
-            chance a run that long appears somewhere in your{" "}
-            {core.wins + core.losses} decisive trades at this win rate (hover for
-            the raw back-to-back odds). Assumes independent trades — strategies
-            whose outcomes cluster will differ.
+            counts as a streak of 1. Breakevens don't break a run. The small %
+            under Longest and Average is the chance a run that long appears
+            somewhere in your {core.wins + core.losses} decisive trades at this
+            win rate (hover for the raw back-to-back odds). Assumes independent
+            trades — strategies whose outcomes cluster will differ.
           </p>
         </CardContent>
       </Card>

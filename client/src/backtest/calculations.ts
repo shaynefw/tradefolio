@@ -34,6 +34,12 @@ export interface CoreSummary {
   winStreakOddsPerAttempt: number;
   lossStreakOddsInSample: number;
   lossStreakOddsPerAttempt: number;
+  // Same odds for the AVERAGE streak. inSample uses the average rounded to a
+  // whole length; perAttempt uses the exact (fractional) average.
+  winAvgStreakOddsInSample: number;
+  winAvgStreakOddsPerAttempt: number;
+  lossAvgStreakOddsInSample: number;
+  lossAvgStreakOddsPerAttempt: number;
   avgMfeWinners: number;
   avgMaeWinners: number;
   avgMfeLosers: number;
@@ -155,6 +161,20 @@ export function computeCoreSummary(ds: BacktestDataset): CoreSummary {
   const lossStreakOddsInSample = runOccurrenceProb(decisive, q, streaks.maxLoss);
   const lossStreakOddsPerAttempt =
     streaks.maxLoss > 0 ? Math.pow(q, streaks.maxLoss) : 0;
+  const winAvgStreakOddsInSample = runOccurrenceProb(
+    decisive,
+    p,
+    Math.round(streaks.avgWin),
+  );
+  const winAvgStreakOddsPerAttempt =
+    streaks.avgWin > 0 ? Math.pow(p, streaks.avgWin) : 0;
+  const lossAvgStreakOddsInSample = runOccurrenceProb(
+    decisive,
+    q,
+    Math.round(streaks.avgLoss),
+  );
+  const lossAvgStreakOddsPerAttempt =
+    streaks.avgLoss > 0 ? Math.pow(q, streaks.avgLoss) : 0;
 
   return {
     totalRows: ds.trades.length,
@@ -179,6 +199,10 @@ export function computeCoreSummary(ds: BacktestDataset): CoreSummary {
     winStreakOddsPerAttempt,
     lossStreakOddsInSample,
     lossStreakOddsPerAttempt,
+    winAvgStreakOddsInSample,
+    winAvgStreakOddsPerAttempt,
+    lossAvgStreakOddsInSample,
+    lossAvgStreakOddsPerAttempt,
     avgMfeWinners: Math.round(mean(winnerMfes)),
     avgMaeWinners: Math.round(mean(winnerMaes)),
     avgMfeLosers: Math.round(mean(loserMfes)),
