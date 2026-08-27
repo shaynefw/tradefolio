@@ -20,8 +20,13 @@ export interface CoreSummary {
   longWinRate: number;
   shortWinRate: number;
   maxWinStreak: number;
-  maxLossStreak: number;
+  minWinStreak: number;
   avgWinStreak: number;
+  winStreakCount: number;
+  maxLossStreak: number;
+  minLossStreak: number;
+  avgLossStreak: number;
+  lossStreakCount: number;
   avgMfeWinners: number;
   avgMaeWinners: number;
   avgMfeLosers: number;
@@ -146,8 +151,13 @@ export function computeCoreSummary(ds: BacktestDataset): CoreSummary {
     longWinRate: longDecisive > 0 ? longWins / longDecisive : 0,
     shortWinRate: shortDecisive > 0 ? shortWins / shortDecisive : 0,
     maxWinStreak: streaks.maxWin,
-    maxLossStreak: streaks.maxLoss,
+    minWinStreak: streaks.minWin,
     avgWinStreak: streaks.avgWin,
+    winStreakCount: streaks.winStreaks,
+    maxLossStreak: streaks.maxLoss,
+    minLossStreak: streaks.minLoss,
+    avgLossStreak: streaks.avgLoss,
+    lossStreakCount: streaks.lossStreaks,
     avgMfeWinners: Math.round(mean(winnerMfes)),
     avgMaeWinners: Math.round(mean(winnerMaes)),
     avgMfeLosers: Math.round(mean(loserMfes)),
@@ -171,39 +181,65 @@ export function computeCoreSummary(ds: BacktestDataset): CoreSummary {
 
 interface StreakResult {
   maxWin: number;
-  maxLoss: number;
+  minWin: number;
   avgWin: number;
+  winStreaks: number; // number of distinct winning streaks
+  maxLoss: number;
+  minLoss: number;
+  avgLoss: number;
+  lossStreaks: number;
 }
 
+// Walks the decisive sequence, collecting every completed run of wins and of
+// losses (a lone win between losses is a win-streak of 1). Breakevens/open
+// rows are skipped and don't break a streak. Returns longest / average /
+// shortest for each side.
 export function computeStreaks(trades: BacktestTrade[]): StreakResult {
-  let curWin = 0;
-  let curLoss = 0;
-  let maxWin = 0;
-  let maxLoss = 0;
-  const winStreaks: number[] = [];
+  const winRuns: number[] = [];
+  const lossRuns: number[] = [];
+  let cur = 0;
+  let curType: "W" | "L" | null = null;
+
+  const flush = () => {
+    if (cur <= 0 || curType == null) return;
+    (curType === "W" ? winRuns : lossRuns).push(cur);
+  };
 
   for (const t of trades) {
-    if (t.outcome === "Took Profit") {
-      if (curLoss > 0) {
-        curLoss = 0;
-      }
-      curWin++;
-      if (curWin > maxWin) maxWin = curWin;
-    } else if (t.outcome === "Took Loss") {
-      if (curWin > 0) {
-        winStreaks.push(curWin);
-        curWin = 0;
-      }
-      curLoss++;
-      if (curLoss > maxLoss) maxLoss = curLoss;
+    const type =
+      t.outcome === "Took Profit"
+        ? "W"
+        : t.outcome === "Took Loss"
+          ? "L"
+          : null;
+    if (type == null) continue; // breakeven / open — don't break the run
+    if (type === curType) {
+      cur++;
+    } else {
+      flush();
+      curType = type;
+      cur = 1;
     }
   }
-  if (curWin > 0) winStreaks.push(curWin);
+  flush();
 
+  const stat = (arr: number[]) => ({
+    max: arr.length ? Math.max(...arr) : 0,
+    min: arr.length ? Math.min(...arr) : 0,
+    avg: arr.length ? mean(arr) : 0,
+    n: arr.length,
+  });
+  const w = stat(winRuns);
+  const l = stat(lossRuns);
   return {
-    maxWin,
-    maxLoss,
-    avgWin: winStreaks.length > 0 ? Math.round(mean(winStreaks)) : 0,
+    maxWin: w.max,
+    minWin: w.min,
+    avgWin: w.avg,
+    winStreaks: w.n,
+    maxLoss: l.max,
+    minLoss: l.min,
+    avgLoss: l.avg,
+    lossStreaks: l.n,
   };
 }
 

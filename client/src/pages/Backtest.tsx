@@ -1893,13 +1893,14 @@ export function OverviewTab({
           sub={`${core.longCount} long · ${core.shortCount} short`}
         />
         <StatCard
-          label="Streaks"
+          label="Streaks (longest)"
           value={
             <span className="text-foreground">
-              {core.maxWinStreak}W / {core.maxLossStreak}L
+              <span className="text-green-400">{core.maxWinStreak}W</span> /{" "}
+              <span className="text-red-400">{core.maxLossStreak}L</span>
             </span>
           }
-          sub={`Avg win streak ${core.avgWinStreak}`}
+          sub={`Avg ${core.avgWinStreak.toFixed(1)}W · ${core.avgLossStreak.toFixed(1)}L`}
         />
         <StatCard
           label="Avg MFE / MAE (Win)"
@@ -1941,6 +1942,46 @@ export function OverviewTab({
           sub={`(wins − losses) / ${core.monthsSpanned} months`}
         />
       </div>
+
+      {/* Streak breakdown */}
+      <Card className="bg-card/60">
+        <CardContent className="pt-5 pb-5">
+          <h3 className="mb-3 text-sm font-semibold">Streak breakdown</h3>
+          <div className="overflow-x-auto rounded-md border border-border">
+            <table className="w-full min-w-[26rem] text-sm">
+              <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 text-left">Streak</th>
+                  <th className="px-3 py-2 text-right">Longest</th>
+                  <th className="px-3 py-2 text-right">Average</th>
+                  <th className="px-3 py-2 text-right">Shortest</th>
+                  <th className="px-3 py-2 text-right"># of runs</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-t border-border/40">
+                  <td className="px-3 py-2 font-medium text-green-400">Winning</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-semibold">{core.maxWinStreak}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{core.avgWinStreak.toFixed(1)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{core.minWinStreak}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{core.winStreakCount}</td>
+                </tr>
+                <tr className="border-t border-border/40">
+                  <td className="px-3 py-2 font-medium text-red-400">Losing</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-semibold">{core.maxLossStreak}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{core.avgLossStreak.toFixed(1)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{core.minLossStreak}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{core.lossStreakCount}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            A run is a consecutive string of the same outcome; a lone win or loss
+            counts as a streak of 1. Breakevens don't break a run.
+          </p>
+        </CardContent>
+      </Card>
 
       <Separator />
 
