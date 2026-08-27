@@ -149,6 +149,14 @@ function oddsLabel(length: number, inSample: number): string {
   if (pct > 0 && pct < 0.1) return "<0.1%";
   return `${pct.toFixed(1)}%`;
 }
+// Short back-to-back odds for a cell subtext (e.g. "36.0%").
+function perAttemptShort(length: number, perAttempt: number): string {
+  if (length <= 0 || perAttempt <= 0) return "—";
+  const pct = perAttempt * 100;
+  if (pct >= 99.95) return ">99.9%";
+  if (pct < 0.1) return "<0.1%";
+  return `${pct.toFixed(1)}%`;
+}
 function perAttemptLabel(length: number, perAttempt: number): string {
   if (length <= 0 || perAttempt <= 0) return "";
   const pct = perAttempt * 100;
@@ -157,30 +165,46 @@ function perAttemptLabel(length: number, perAttempt: number): string {
   const lenStr = Number.isInteger(length) ? String(length) : length.toFixed(1);
   return `Back-to-back: ${lenStr} in a row = ${pctStr}% (~1 in ${one.toLocaleString()})`;
 }
+function inSampleLabel(length: number, inSample: number): string {
+  if (length <= 0) return "";
+  return `Appears somewhere in your sample: ${oddsLabel(length, inSample)}`;
+}
 
-// A streak-metric cell: the count on top, its in-sample odds as small subtext,
-// with the raw back-to-back odds on hover. `lenForTip` overrides the length
-// used in the tooltip (for the fractional average).
+// A streak-metric cell: the count on top with an odds figure as subtext.
+// `primary` picks which odds is the headline — in-sample for the longest
+// streak ("was it unusual?"), back-to-back for the average ("odds of a typical
+// run"), since in-sample is ~certain for short average lengths. The other odds
+// is on hover. `lenForTip` overrides the length used (for the fractional avg).
 function StreakCell({
   count,
   inSample,
   perAttempt,
   lenForTip,
+  primary = "inSample",
 }: {
   count: number | string;
   inSample: number;
   perAttempt: number;
   lenForTip?: number;
+  primary?: "inSample" | "perAttempt";
 }) {
   const len = lenForTip ?? (typeof count === "number" ? count : 0);
+  const subtext =
+    primary === "inSample"
+      ? oddsLabel(len, inSample)
+      : perAttemptShort(len, perAttempt);
+  const title =
+    primary === "inSample"
+      ? perAttemptLabel(len, perAttempt)
+      : inSampleLabel(len, inSample);
   return (
     <td
       className="px-3 py-2 text-right align-top tabular-nums"
-      title={perAttemptLabel(len, perAttempt)}
+      title={title}
     >
       <div className="font-semibold">{count}</div>
       <div className="text-[10px] font-normal text-muted-foreground">
-        {oddsLabel(len, inSample)}
+        {subtext}
       </div>
     </td>
   );
@@ -2007,15 +2031,15 @@ export function OverviewTab({
               <tbody>
                 <tr className="border-t border-border/40">
                   <td className="px-3 py-2 font-medium text-green-400 align-top">Winning</td>
-                  <StreakCell count={core.maxWinStreak} inSample={core.winStreakOddsInSample} perAttempt={core.winStreakOddsPerAttempt} />
-                  <StreakCell count={core.avgWinStreak.toFixed(1)} lenForTip={core.avgWinStreak} inSample={core.winAvgStreakOddsInSample} perAttempt={core.winAvgStreakOddsPerAttempt} />
+                  <StreakCell count={core.maxWinStreak} inSample={core.winStreakOddsInSample} perAttempt={core.winStreakOddsPerAttempt} primary="inSample" />
+                  <StreakCell count={core.avgWinStreak.toFixed(1)} lenForTip={core.avgWinStreak} inSample={core.winAvgStreakOddsInSample} perAttempt={core.winAvgStreakOddsPerAttempt} primary="perAttempt" />
                   <td className="px-3 py-2 text-right tabular-nums align-top">{core.minWinStreak}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground align-top">{core.winStreakCount}</td>
                 </tr>
                 <tr className="border-t border-border/40">
                   <td className="px-3 py-2 font-medium text-red-400 align-top">Losing</td>
-                  <StreakCell count={core.maxLossStreak} inSample={core.lossStreakOddsInSample} perAttempt={core.lossStreakOddsPerAttempt} />
-                  <StreakCell count={core.avgLossStreak.toFixed(1)} lenForTip={core.avgLossStreak} inSample={core.lossAvgStreakOddsInSample} perAttempt={core.lossAvgStreakOddsPerAttempt} />
+                  <StreakCell count={core.maxLossStreak} inSample={core.lossStreakOddsInSample} perAttempt={core.lossStreakOddsPerAttempt} primary="inSample" />
+                  <StreakCell count={core.avgLossStreak.toFixed(1)} lenForTip={core.avgLossStreak} inSample={core.lossAvgStreakOddsInSample} perAttempt={core.lossAvgStreakOddsPerAttempt} primary="perAttempt" />
                   <td className="px-3 py-2 text-right tabular-nums align-top">{core.minLossStreak}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground align-top">{core.lossStreakCount}</td>
                 </tr>
@@ -2024,11 +2048,14 @@ export function OverviewTab({
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             A run is a consecutive string of the same outcome; a lone win or loss
-            counts as a streak of 1. Breakevens don't break a run. The small %
-            under Longest and Average is the chance a run that long appears
-            somewhere in your {core.wins + core.losses} decisive trades at this
-            win rate (hover for the raw back-to-back odds). Assumes independent
-            trades — strategies whose outcomes cluster will differ.
+            counts as a streak of 1. Breakevens don't break a run. Under{" "}
+            <span className="text-foreground/70">Longest</span>: the chance a run
+            that long appears somewhere in your {core.wins + core.losses} decisive
+            trades. Under <span className="text-foreground/70">Average</span>: the
+            back-to-back chance of an average-length run from a fresh start (the
+            in-sample chance is near-certain for short runs, so it's on hover
+            instead). Assumes independent trades — strategies whose outcomes
+            cluster will differ.
           </p>
         </CardContent>
       </Card>
