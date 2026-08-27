@@ -203,7 +203,7 @@ function StreakCell({
       title={title}
     >
       <div className="font-semibold">{count}</div>
-      <div className="text-[10px] font-normal text-muted-foreground">
+      <div className="text-[11px] font-semibold text-cyan-300">
         {subtext}
       </div>
     </td>
