@@ -449,6 +449,8 @@ export interface WeeklyStats {
   avgWinsPerWeek: number;
   avgLossesPerWeek: number;
   avgNetPointsPerWeek: number;
+  mostLossesInWeek: number;   // worst single week's loss count
+  leastLossesInWeek: number;  // best single week's loss count (0 if a clean week)
   byWeekOfMonth: WeekOfMonthBucket[];
   total: WeekOfMonthBucket;   // whole-dataset totals (for the table's total row)
 }
@@ -465,6 +467,7 @@ export function computeWeekly(ds: BacktestDataset): WeeklyStats {
   };
 
   const weekKeys = new Set<string>();
+  const lossesByWeek = new Map<string, number>(); // per-calendar-week loss count
   const wom = new Map<number, WeekOfMonthBucket>();
   let totalTrades = 0;
   let totalWins = 0;
@@ -478,9 +481,8 @@ export function computeWeekly(ds: BacktestDataset): WeeklyStats {
     const dow = (d.getDay() + 6) % 7;
     const monday = new Date(d);
     monday.setDate(d.getDate() - dow);
-    weekKeys.add(
-      `${monday.getFullYear()}-${monday.getMonth()}-${monday.getDate()}`,
-    );
+    const wk = `${monday.getFullYear()}-${monday.getMonth()}-${monday.getDate()}`;
+    weekKeys.add(wk);
 
     const isWin = t.outcome === "Took Profit";
     const pts = pointsFor(t);
@@ -488,6 +490,8 @@ export function computeWeekly(ds: BacktestDataset): WeeklyStats {
     if (isWin) totalWins++;
     else totalLosses++;
     totalNet += pts;
+    // Track loss count per week (every traded week gets an entry, 0 if clean).
+    lossesByWeek.set(wk, (lossesByWeek.get(wk) ?? 0) + (isWin ? 0 : 1));
 
     const w = Math.min(5, Math.floor((d.getDate() - 1) / 7) + 1);
     const b =
@@ -516,12 +520,15 @@ export function computeWeekly(ds: BacktestDataset): WeeklyStats {
   }
 
   const weeks = weekKeys.size;
+  const lossCounts = [...lossesByWeek.values()];
   return {
     weeks,
     avgTradesPerWeek: weeks > 0 ? totalTrades / weeks : 0,
     avgWinsPerWeek: weeks > 0 ? totalWins / weeks : 0,
     avgLossesPerWeek: weeks > 0 ? totalLosses / weeks : 0,
     avgNetPointsPerWeek: weeks > 0 ? totalNet / weeks : 0,
+    mostLossesInWeek: lossCounts.length ? Math.max(...lossCounts) : 0,
+    leastLossesInWeek: lossCounts.length ? Math.min(...lossCounts) : 0,
     byWeekOfMonth,
     total: {
       week: 0,

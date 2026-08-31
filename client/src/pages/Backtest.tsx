@@ -111,10 +111,12 @@ function MiniStat({
   label,
   value,
   tone,
+  sub,
 }: {
   label: string;
   value: string;
   tone?: number;
+  sub?: string;
 }) {
   return (
     <div className="rounded-md border border-border/60 bg-background/40 p-2.5">
@@ -129,6 +131,9 @@ function MiniStat({
       >
         {value}
       </p>
+      {sub && (
+        <p className="mt-0.5 text-[10px] text-muted-foreground">{sub}</p>
+      )}
     </div>
   );
 }
@@ -2428,6 +2433,7 @@ export function TimingTab({
                   label="Avg losses / week"
                   value={weekly.avgLossesPerWeek.toFixed(1)}
                   tone={weekly.avgLossesPerWeek > 0 ? -1 : 0}
+                  sub={`most ${weekly.mostLossesInWeek} · least ${weekly.leastLossesInWeek}`}
                 />
                 <MiniStat label="Avg wins / week" value={weekly.avgWinsPerWeek.toFixed(1)} tone={1} />
                 <MiniStat
