@@ -426,6 +426,117 @@ export function computeByWeekday(ds: BacktestDataset): WeekdayBucket[] {
 }
 
 // ---------------------------------------------------------------------------
+// Weekly cadence. Overall per-week averages (trades / wins / losses / net)
+// over the distinct calendar weeks the dataset spans, plus a week-of-month
+// breakdown (W1 = days 1–7 … W5 = 29–31). Points use the effective TP/SL so it
+// stays meaningful for fixed and fluid strategies.
+// ---------------------------------------------------------------------------
+
+export interface WeekOfMonthBucket {
+  week: number;   // 1..5
+  label: string;  // "Wk 1"
+  trades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  netPoints: number;
+  evPoints: number; // netPoints / trades
+}
+
+export interface WeeklyStats {
+  weeks: number;              // distinct calendar weeks with decisive trades
+  avgTradesPerWeek: number;
+  avgWinsPerWeek: number;
+  avgLossesPerWeek: number;
+  avgNetPointsPerWeek: number;
+  byWeekOfMonth: WeekOfMonthBucket[];
+  total: WeekOfMonthBucket;   // whole-dataset totals (for the table's total row)
+}
+
+export function computeWeekly(ds: BacktestDataset): WeeklyStats {
+  const { stopPoints: effSl, fluid: slFluid } = effectiveStopPoints(ds);
+  const fixedTp = ds.takeProfitBricks * ds.brickPoints;
+  const tpFluid = ds.tpMode === "fluid";
+  const pointsFor = (t: BacktestTrade): number => {
+    if (t.outcome === "Took Profit") {
+      return tpFluid ? Math.abs(t.resultPoints ?? t.mfe ?? 0) : fixedTp;
+    }
+    return -(slFluid ? Math.abs(t.resultPoints ?? t.mae ?? 0) : effSl);
+  };
+
+  const weekKeys = new Set<string>();
+  const wom = new Map<number, WeekOfMonthBucket>();
+  let totalTrades = 0;
+  let totalWins = 0;
+  let totalLosses = 0;
+  let totalNet = 0;
+
+  for (const t of ds.trades) {
+    if (!t.validEntry || !isDecisive(t)) continue;
+    const d = t.date;
+    // Monday-anchored calendar-week key (local TZ, matching the weekday view).
+    const dow = (d.getDay() + 6) % 7;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - dow);
+    weekKeys.add(
+      `${monday.getFullYear()}-${monday.getMonth()}-${monday.getDate()}`,
+    );
+
+    const isWin = t.outcome === "Took Profit";
+    const pts = pointsFor(t);
+    totalTrades++;
+    if (isWin) totalWins++;
+    else totalLosses++;
+    totalNet += pts;
+
+    const w = Math.min(5, Math.floor((d.getDate() - 1) / 7) + 1);
+    const b =
+      wom.get(w) ??
+      {
+        week: w,
+        label: `Wk ${w}`,
+        trades: 0,
+        wins: 0,
+        losses: 0,
+        winRate: 0,
+        netPoints: 0,
+        evPoints: 0,
+      };
+    b.trades++;
+    if (isWin) b.wins++;
+    else b.losses++;
+    b.netPoints += pts;
+    wom.set(w, b);
+  }
+
+  const byWeekOfMonth = [...wom.values()].sort((a, b) => a.week - b.week);
+  for (const b of byWeekOfMonth) {
+    b.winRate = b.trades > 0 ? b.wins / b.trades : 0;
+    b.evPoints = b.trades > 0 ? b.netPoints / b.trades : 0;
+  }
+
+  const weeks = weekKeys.size;
+  return {
+    weeks,
+    avgTradesPerWeek: weeks > 0 ? totalTrades / weeks : 0,
+    avgWinsPerWeek: weeks > 0 ? totalWins / weeks : 0,
+    avgLossesPerWeek: weeks > 0 ? totalLosses / weeks : 0,
+    avgNetPointsPerWeek: weeks > 0 ? totalNet / weeks : 0,
+    byWeekOfMonth,
+    total: {
+      week: 0,
+      label: "Total",
+      trades: totalTrades,
+      wins: totalWins,
+      losses: totalLosses,
+      winRate: totalTrades > 0 ? totalWins / totalTrades : 0,
+      netPoints: totalNet,
+      evPoints: totalTrades > 0 ? totalNet / totalTrades : 0,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // By trade number (T1..Tn) — intraday sequence position.
 // ---------------------------------------------------------------------------
 

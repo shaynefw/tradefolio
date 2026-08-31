@@ -73,6 +73,7 @@ import { Pencil, StickyNote, Trash2 } from "lucide-react";
 import {
   computeByHour,
   computeByWeekday,
+  computeWeekly,
   computeBySide,
   computeByTradeNo,
   computeCoreSummary,
@@ -102,6 +103,34 @@ interface StatCardProps {
   value: React.ReactNode;
   sub?: React.ReactNode;
   className?: string;
+}
+
+// Small inline stat tile (label + value), tone-colored by sign when given.
+// Lighter-weight than StatCard — for use inside an existing card.
+function MiniStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: number;
+}) {
+  return (
+    <div className="rounded-md border border-border/60 bg-background/40 p-2.5">
+      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <p
+        className={cn(
+          "mt-0.5 font-semibold tabular-nums",
+          tone !== undefined ? pnlColor(tone) : "text-foreground",
+        )}
+      >
+        {value}
+      </p>
+    </div>
+  );
 }
 
 function StatCard({ label, value, sub, className }: StatCardProps) {
@@ -314,6 +343,7 @@ export default function Backtest() {
   );
   const byHour = useMemo(() => (ds ? computeByHour(ds) : []), [ds]);
   const byWeekday = useMemo(() => (ds ? computeByWeekday(ds) : []), [ds]);
+  const weekly = useMemo(() => (ds ? computeWeekly(ds) : null), [ds]);
   const byTradeNo = useMemo(() => (ds ? computeByTradeNo(ds) : []), [ds]);
   const bySide = useMemo(() => (ds ? computeBySide(ds) : []), [ds]);
   const rr = useMemo(() => (ds ? computeRrBuckets(ds) : []), [ds]);
@@ -714,6 +744,7 @@ export default function Backtest() {
               <TimingTab
                 byHour={byHour}
                 byWeekday={byWeekday}
+                weekly={weekly}
                 byTradeNo={byTradeNo}
                 bySide={bySide}
                 rr={rr}
@@ -2178,6 +2209,7 @@ function ScalingSummary({
 export function TimingTab({
   byHour,
   byWeekday,
+  weekly,
   byTradeNo,
   bySide,
   rr,
@@ -2187,6 +2219,7 @@ export function TimingTab({
 }: {
   byHour: ReturnType<typeof computeByHour>;
   byWeekday: ReturnType<typeof computeByWeekday>;
+  weekly: ReturnType<typeof computeWeekly> | null;
   byTradeNo: ReturnType<typeof computeByTradeNo>;
   bySide: ReturnType<typeof computeBySide>;
   rr: ReturnType<typeof computeRrBuckets>;
@@ -2378,6 +2411,89 @@ export function TimingTab({
           </CardContent>
         </Card>
       </section>
+
+      {/* Weekly cadence */}
+      {weekly && weekly.weeks > 0 && (
+        <section className="space-y-3">
+          <SectionHeader
+            icon={CalendarDays}
+            title="Weekly cadence"
+            hint={`Averaged over ${weekly.weeks} calendar week${weekly.weeks === 1 ? "" : "s"} of trading. Week-of-month splits days 1–7 = Wk 1, etc.`}
+          />
+          <Card className="bg-card/60">
+            <CardContent className="pt-5 pb-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <MiniStat label="Avg trades / week" value={weekly.avgTradesPerWeek.toFixed(1)} />
+                <MiniStat
+                  label="Avg losses / week"
+                  value={weekly.avgLossesPerWeek.toFixed(1)}
+                  tone={weekly.avgLossesPerWeek > 0 ? -1 : 0}
+                />
+                <MiniStat label="Avg wins / week" value={weekly.avgWinsPerWeek.toFixed(1)} tone={1} />
+                <MiniStat
+                  label="Avg net / week (pts)"
+                  value={`${weekly.avgNetPointsPerWeek >= 0 ? "+" : ""}${weekly.avgNetPointsPerWeek.toFixed(0)}`}
+                  tone={weekly.avgNetPointsPerWeek}
+                />
+              </div>
+
+              <div className="overflow-x-auto rounded-md border border-border">
+                <table className="w-full min-w-[30rem] text-sm">
+                  <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Week of month</th>
+                      <th className="px-3 py-2 text-right">Trades</th>
+                      <th className="px-3 py-2 text-right">W / L</th>
+                      <th className="px-3 py-2 text-right">Win rate</th>
+                      <th className="px-3 py-2 text-right">Net (pts)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {weekly.byWeekOfMonth.map((b) => (
+                      <tr key={b.week} className="border-t border-border/40">
+                        <td className="px-3 py-2 font-medium">{b.label}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{b.trades}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          <span className="text-green-400">{b.wins}</span>
+                          <span className="text-muted-foreground"> / </span>
+                          <span className="text-red-400">{b.losses}</span>
+                        </td>
+                        <td className={cn("px-3 py-2 text-right tabular-nums font-semibold", b.winRate >= 0.5 ? "text-green-400" : "text-red-400")}>
+                          {fmtPct(b.winRate)}
+                        </td>
+                        <td className={cn("px-3 py-2 text-right tabular-nums font-semibold", b.netPoints >= 0 ? "text-green-400" : "text-red-400")}>
+                          {b.netPoints >= 0 ? "+" : ""}{Math.round(b.netPoints)}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="border-t-2 border-border bg-muted/20 font-semibold">
+                      <td className="px-3 py-2">{weekly.total.label}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{weekly.total.trades}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        <span className="text-green-400">{weekly.total.wins}</span>
+                        <span className="text-muted-foreground"> / </span>
+                        <span className="text-red-400">{weekly.total.losses}</span>
+                      </td>
+                      <td className={cn("px-3 py-2 text-right tabular-nums", weekly.total.winRate >= 0.5 ? "text-green-400" : "text-red-400")}>
+                        {fmtPct(weekly.total.winRate)}
+                      </td>
+                      <td className={cn("px-3 py-2 text-right tabular-nums", weekly.total.netPoints >= 0 ? "text-green-400" : "text-red-400")}>
+                        {weekly.total.netPoints >= 0 ? "+" : ""}{Math.round(weekly.total.netPoints)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Week-of-month buckets every trade by its calendar day (1–7 = Wk 1
+                … 29–31 = Wk 5), pooling that slot across all months — useful for
+                spotting if, say, month-start behaves differently. Net points use
+                this dataset's TP/SL.
+              </p>
+            </CardContent>
+          </Card>
+        </section>
+      )}
 
       {/* Trade # */}
       <section className="space-y-3">

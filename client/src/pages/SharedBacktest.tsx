@@ -12,6 +12,7 @@ import {
 import {
   computeByHour,
   computeByWeekday,
+  computeWeekly,
   computeBySide,
   computeByTradeNo,
   computeCoreSummary,
@@ -44,6 +45,7 @@ export default function SharedBacktest() {
   const core = useMemo(() => (ds ? computeCoreSummary(ds) : null), [ds]);
   const byHour = useMemo(() => (ds ? computeByHour(ds) : []), [ds]);
   const byWeekday = useMemo(() => (ds ? computeByWeekday(ds) : []), [ds]);
+  const weekly = useMemo(() => (ds ? computeWeekly(ds) : null), [ds]);
   const byTradeNo = useMemo(() => (ds ? computeByTradeNo(ds) : []), [ds]);
   const bySide = useMemo(() => (ds ? computeBySide(ds) : []), [ds]);
   const rr = useMemo(() => (ds ? computeRrBuckets(ds) : []), [ds]);
@@ -139,6 +141,7 @@ export default function SharedBacktest() {
                 <TimingTab
                   byHour={byHour}
                   byWeekday={byWeekday}
+                  weekly={weekly}
                   byTradeNo={byTradeNo}
                   bySide={bySide}
                   rr={rr}
