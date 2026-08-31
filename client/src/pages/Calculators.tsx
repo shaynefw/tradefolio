@@ -5,6 +5,7 @@ import DashboardLayout from "../components/DashboardLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import PositionSizePanel from "./SizeCalculator";
 import PercentCalculator from "./PercentCalculator";
+import PayoutTracker from "./PayoutTracker";
 
 // Remembers which calculator you were last on, so returning to the page picks
 // up where you left off.
@@ -46,6 +47,7 @@ export default function Calculators() {
           <TabsList className="max-w-full justify-start overflow-x-auto">
             <TabsTrigger value="size">Position Size</TabsTrigger>
             <TabsTrigger value="percent">Percentages</TabsTrigger>
+            <TabsTrigger value="payout">Payout Tracker</TabsTrigger>
           </TabsList>
 
           <TabsContent value="size" className="mt-6">
@@ -53,6 +55,9 @@ export default function Calculators() {
           </TabsContent>
           <TabsContent value="percent" className="mt-6">
             <PercentCalculator />
+          </TabsContent>
+          <TabsContent value="payout" className="mt-6">
+            <PayoutTracker />
           </TabsContent>
         </Tabs>
       </div>
