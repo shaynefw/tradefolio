@@ -451,6 +451,12 @@ export interface WeeklyStats {
   avgNetPointsPerWeek: number;
   mostLossesInWeek: number;   // worst single week's loss count
   leastLossesInWeek: number;  // best single week's loss count (0 if a clean week)
+  mostTradesInWeek: number;
+  leastTradesInWeek: number;
+  mostWinsInWeek: number;
+  leastWinsInWeek: number;
+  mostNetPointsInWeek: number;
+  leastNetPointsInWeek: number;
   byWeekOfMonth: WeekOfMonthBucket[];
   total: WeekOfMonthBucket;   // whole-dataset totals (for the table's total row)
 }
@@ -467,7 +473,11 @@ export function computeWeekly(ds: BacktestDataset): WeeklyStats {
   };
 
   const weekKeys = new Set<string>();
-  const lossesByWeek = new Map<string, number>(); // per-calendar-week loss count
+  // Per-calendar-week aggregates (every traded week gets an entry).
+  const byWeek = new Map<
+    string,
+    { trades: number; wins: number; losses: number; net: number }
+  >();
   const wom = new Map<number, WeekOfMonthBucket>();
   let totalTrades = 0;
   let totalWins = 0;
@@ -490,8 +500,12 @@ export function computeWeekly(ds: BacktestDataset): WeeklyStats {
     if (isWin) totalWins++;
     else totalLosses++;
     totalNet += pts;
-    // Track loss count per week (every traded week gets an entry, 0 if clean).
-    lossesByWeek.set(wk, (lossesByWeek.get(wk) ?? 0) + (isWin ? 0 : 1));
+    const wa = byWeek.get(wk) ?? { trades: 0, wins: 0, losses: 0, net: 0 };
+    wa.trades++;
+    if (isWin) wa.wins++;
+    else wa.losses++;
+    wa.net += pts;
+    byWeek.set(wk, wa);
 
     const w = Math.min(5, Math.floor((d.getDate() - 1) / 7) + 1);
     const b =
@@ -520,15 +534,30 @@ export function computeWeekly(ds: BacktestDataset): WeeklyStats {
   }
 
   const weeks = weekKeys.size;
-  const lossCounts = [...lossesByWeek.values()];
+  const wks = [...byWeek.values()];
+  const range = (sel: (w: (typeof wks)[number]) => number) => {
+    if (wks.length === 0) return { most: 0, least: 0 };
+    const vals = wks.map(sel);
+    return { most: Math.max(...vals), least: Math.min(...vals) };
+  };
+  const rTrades = range((w) => w.trades);
+  const rWins = range((w) => w.wins);
+  const rLosses = range((w) => w.losses);
+  const rNet = range((w) => w.net);
   return {
     weeks,
     avgTradesPerWeek: weeks > 0 ? totalTrades / weeks : 0,
     avgWinsPerWeek: weeks > 0 ? totalWins / weeks : 0,
     avgLossesPerWeek: weeks > 0 ? totalLosses / weeks : 0,
     avgNetPointsPerWeek: weeks > 0 ? totalNet / weeks : 0,
-    mostLossesInWeek: lossCounts.length ? Math.max(...lossCounts) : 0,
-    leastLossesInWeek: lossCounts.length ? Math.min(...lossCounts) : 0,
+    mostLossesInWeek: rLosses.most,
+    leastLossesInWeek: rLosses.least,
+    mostTradesInWeek: rTrades.most,
+    leastTradesInWeek: rTrades.least,
+    mostWinsInWeek: rWins.most,
+    leastWinsInWeek: rWins.least,
+    mostNetPointsInWeek: rNet.most,
+    leastNetPointsInWeek: rNet.least,
     byWeekOfMonth,
     total: {
       week: 0,

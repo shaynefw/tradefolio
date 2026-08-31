@@ -2428,18 +2428,28 @@ export function TimingTab({
           <Card className="bg-card/60">
             <CardContent className="pt-5 pb-5 space-y-4">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <MiniStat label="Avg trades / week" value={weekly.avgTradesPerWeek.toFixed(1)} />
+                <MiniStat
+                  label="Avg trades / week"
+                  value={weekly.avgTradesPerWeek.toFixed(1)}
+                  sub={`most ${weekly.mostTradesInWeek} · least ${weekly.leastTradesInWeek}`}
+                />
                 <MiniStat
                   label="Avg losses / week"
                   value={weekly.avgLossesPerWeek.toFixed(1)}
                   tone={weekly.avgLossesPerWeek > 0 ? -1 : 0}
                   sub={`most ${weekly.mostLossesInWeek} · least ${weekly.leastLossesInWeek}`}
                 />
-                <MiniStat label="Avg wins / week" value={weekly.avgWinsPerWeek.toFixed(1)} tone={1} />
+                <MiniStat
+                  label="Avg wins / week"
+                  value={weekly.avgWinsPerWeek.toFixed(1)}
+                  tone={1}
+                  sub={`most ${weekly.mostWinsInWeek} · least ${weekly.leastWinsInWeek}`}
+                />
                 <MiniStat
                   label="Avg net / week (pts)"
                   value={`${weekly.avgNetPointsPerWeek >= 0 ? "+" : ""}${weekly.avgNetPointsPerWeek.toFixed(0)}`}
                   tone={weekly.avgNetPointsPerWeek}
+                  sub={`most ${weekly.mostNetPointsInWeek >= 0 ? "+" : ""}${weekly.mostNetPointsInWeek.toFixed(0)} · least ${weekly.leastNetPointsInWeek >= 0 ? "+" : ""}${weekly.leastNetPointsInWeek.toFixed(0)}`}
                 />
               </div>
 
