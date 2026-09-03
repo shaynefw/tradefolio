@@ -2427,7 +2427,7 @@ export function TimingTab({
           />
           <Card className="bg-card/60">
             <CardContent className="pt-5 pb-5 space-y-4">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
                 <MiniStat
                   label="Avg trades / week"
                   value={weekly.avgTradesPerWeek.toFixed(1)}
@@ -2450,6 +2450,12 @@ export function TimingTab({
                   value={`${weekly.avgNetPointsPerWeek >= 0 ? "+" : ""}${weekly.avgNetPointsPerWeek.toFixed(0)}`}
                   tone={weekly.avgNetPointsPerWeek}
                   sub={`most ${weekly.mostNetPointsInWeek >= 0 ? "+" : ""}${weekly.mostNetPointsInWeek.toFixed(0)} · least ${weekly.leastNetPointsInWeek >= 0 ? "+" : ""}${weekly.leastNetPointsInWeek.toFixed(0)}`}
+                />
+                <MiniStat
+                  label="EV / trade (pts)"
+                  value={`${weekly.total.evPoints >= 0 ? "+" : ""}${weekly.total.evPoints.toFixed(1)}`}
+                  tone={weekly.total.evPoints}
+                  sub={`× ${weekly.avgTradesPerWeek.toFixed(1)} tr = ${weekly.avgNetPointsPerWeek >= 0 ? "+" : ""}${weekly.avgNetPointsPerWeek.toFixed(0)}/wk`}
                 />
               </div>
 
