@@ -2460,7 +2460,7 @@ export function TimingTab({
               </div>
 
               <div className="overflow-x-auto rounded-md border border-border">
-                <table className="w-full min-w-[30rem] text-sm">
+                <table className="w-full min-w-[36rem] text-sm">
                   <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
                     <tr>
                       <th className="px-3 py-2 text-left">Week of month</th>
@@ -2468,6 +2468,7 @@ export function TimingTab({
                       <th className="px-3 py-2 text-right">W / L</th>
                       <th className="px-3 py-2 text-right">Win rate</th>
                       <th className="px-3 py-2 text-right">Net (pts)</th>
+                      <th className="px-3 py-2 text-right">EV / trade</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2486,6 +2487,9 @@ export function TimingTab({
                         <td className={cn("px-3 py-2 text-right tabular-nums font-semibold", b.netPoints >= 0 ? "text-green-400" : "text-red-400")}>
                           {b.netPoints >= 0 ? "+" : ""}{Math.round(b.netPoints)}
                         </td>
+                        <td className={cn("px-3 py-2 text-right tabular-nums", b.evPoints >= 0 ? "text-green-400" : "text-red-400")}>
+                          {b.evPoints >= 0 ? "+" : ""}{b.evPoints.toFixed(1)}
+                        </td>
                       </tr>
                     ))}
                     <tr className="border-t-2 border-border bg-muted/20 font-semibold">
@@ -2501,6 +2505,9 @@ export function TimingTab({
                       </td>
                       <td className={cn("px-3 py-2 text-right tabular-nums", weekly.total.netPoints >= 0 ? "text-green-400" : "text-red-400")}>
                         {weekly.total.netPoints >= 0 ? "+" : ""}{Math.round(weekly.total.netPoints)}
+                      </td>
+                      <td className={cn("px-3 py-2 text-right tabular-nums", weekly.total.evPoints >= 0 ? "text-green-400" : "text-red-400")}>
+                        {weekly.total.evPoints >= 0 ? "+" : ""}{weekly.total.evPoints.toFixed(1)}
                       </td>
                     </tr>
                   </tbody>
